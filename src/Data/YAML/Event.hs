@@ -1,5 +1,6 @@
 module Data.YAML.Event
     ( Event(..)
+    , Style(..)
     , parseEvents
     ) where
 
@@ -30,7 +31,7 @@ data Event
     | DocumentStart
     | DocumentEnd
     | Alias          !Anchor
-    | Scalar         !OptAnchor  !Tag  !Text
+    | Scalar         !OptAnchor  !Tag  !Style  !Text
     | SequenceStart  !OptAnchor  !Tag
     | SequenceEnd
     | MappingStart   !OptAnchor  !Tag
@@ -46,6 +47,13 @@ type Tag = Maybe Text
 type Props = (OptAnchor,Tag)
 
 type EvStream = [Either (Int,String) Event]
+
+data Style = Plain
+           | SingleQuoted
+           | DoubleQuoted
+           | Literal
+           | Folded
+           deriving (Eq,Show)
 
 parseEvents :: BS.L.ByteString -> EvStream
 parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . isWhite) (Y.yaml "" bs0 False))
@@ -74,7 +82,7 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
     go0 xs = err xs
 
     goNode :: Tok2EvStreamCont
-    goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar mempty mempty rest (flip goNodeEnd cont)
+    goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar mempty rest (flip goNodeEnd cont)
     goNode (Y.Token { Y.tCode = Y.BeginSequence } : rest) cont = Right (SequenceStart Nothing Nothing) : goSeq rest (flip goNodeEnd cont)
     goNode (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart Nothing Nothing) : goMap rest (flip goNodeEnd cont)
     goNode (Y.Token { Y.tCode = Y.BeginProperties } : rest) cont = goProp mempty rest (\p rest' -> goNode' p rest' cont)
@@ -87,7 +95,7 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
     goNode xs _cont = err xs
 
     goNode' :: Props -> Tok2EvStreamCont
-    goNode' props (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont   = goScalar props mempty rest (flip goNodeEnd cont)
+    goNode' props (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont   = goScalar props rest (flip goNodeEnd cont)
     goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginSequence } : rest) cont = Right (SequenceStart manchor mtag) : goSeq rest (flip goNodeEnd cont)
     goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart manchor mtag) : goMap rest (flip goNodeEnd cont)
     goNode' _ xs                                            _cont = err xs
@@ -141,12 +149,20 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
           cont = cont (anchor,Just $! T.pack ('!' : tag)) rest
     goTag _ xs _ = err xs
 
-    goScalar :: Props -> String -> Tok2EvStreamCont
-    goScalar props acc (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest) cont = goScalar props (acc ++ t) rest cont
-    goScalar props acc (Y.Token { Y.tCode = Y.LineFold } : rest) cont = goScalar props (acc ++ " ") rest cont
-    goScalar props acc (Y.Token { Y.tCode = Y.LineFeed } : rest) cont = goScalar props (acc ++ "\n") rest cont
-    goScalar (manchor,tag) acc (Y.Token { Y.tCode = Y.EndScalar } : rest) cont = Right (Scalar manchor tag (T.pack acc)) : cont rest
-    goScalar _props _acc xs _cont = err xs
+    goScalar :: Props -> Tok2EvStreamCont
+    goScalar (manchor,tag) toks0 cont = go' "" Plain toks0
+      where
+        go' acc sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest) = go'  (acc ++ t) sty rest
+        go' acc sty (Y.Token { Y.tCode = Y.LineFold } : rest) = go'  (acc ++ " ") sty rest
+        go' acc sty (Y.Token { Y.tCode = Y.LineFeed } : rest) = go'  (acc ++ "\n") sty rest
+        go' acc sty (Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest)
+          | "'"  <- ind = go' acc SingleQuoted rest
+          | "\"" <- ind = go' acc DoubleQuoted rest
+          | "|"  <- ind = go' acc Literal rest
+          | ">"  <- ind = go' acc Folded rest
+          | otherwise   = go' acc sty rest
+        go' acc sty (Y.Token { Y.tCode = Y.EndScalar } : rest) = Right (Scalar manchor tag sty (T.pack acc)) : cont rest
+        go' _ _ xs = err xs
 
     goSeq :: Tok2EvStreamCont
     goSeq (Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right SequenceEnd : cont rest
