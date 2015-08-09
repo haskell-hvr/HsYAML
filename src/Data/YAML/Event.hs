@@ -1,6 +1,8 @@
 module Data.YAML.Event
     ( Event(..)
     , Style(..)
+    , Tag
+    , Anchor
     , parseEvents
     ) where
 
