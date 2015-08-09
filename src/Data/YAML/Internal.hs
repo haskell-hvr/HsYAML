@@ -23,9 +23,11 @@
 module Data.YAML.Internal
   ( -- Basic parsing:
     Code(..)
-  , Token
+  , Token(..)
   , Tokenizer
   , yaml
+
+{-
     -- For testing:
   , Context
   , Chomp
@@ -37,11 +39,12 @@ module Data.YAML.Internal
   , tokenizerWithNT
   , tokenizerNames
   , showTokens
+-}
   ) where
 
 -- import           Control.Applicative        (Applicative (..))
 import           Control.Monad
-import qualified Data.ByteString.Lazy.Char8 as C
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Char
 import qualified Data.DList                 as D
 import qualified Data.Map                   as Map
@@ -112,9 +115,9 @@ instance Show Encoding where
 -- | @decode bytes@ automatically detects the 'Encoding' used and converts the
 -- /bytes/ to Unicode characters, with byte offsets. Note the offset is for
 -- past end of the character, not its beginning.
-decode :: C.ByteString -> (Encoding, [(Int, Char)])
+decode :: BLC.ByteString -> (Encoding, [(Int, Char)])
 decode text = (encoding, undoEncoding encoding text)
-  where encoding = detectEncoding $ C.unpack $ C.take 4 text
+  where encoding = detectEncoding $ BLC.unpack $ BLC.take 4 text
 
 -- | @detectEncoding text@ examines the first few chars (bytes) of the /text/
 -- to deduce the Unicode encoding used according to the YAML spec.
@@ -134,7 +137,7 @@ detectEncoding text =
 
 -- | @undoEncoding encoding bytes@ converts a /bytes/ stream to Unicode
 -- characters according to the /encoding/.
-undoEncoding :: Encoding -> C.ByteString -> [(Int, Char)]
+undoEncoding :: Encoding -> BLC.ByteString -> [(Int, Char)]
 undoEncoding encoding bytes =
   case encoding of
     UTF8    -> undoUTF8 bytes 0
@@ -147,26 +150,26 @@ undoEncoding encoding bytes =
 
 -- | @hasFewerThan bytes n@ checks whether there are fewer than /n/ /bytes/
 -- left to read.
-hasFewerThan :: Int -> C.ByteString -> Bool
+hasFewerThan :: Int -> BLC.ByteString -> Bool
 hasFewerThan n bytes
-  | n == 1 = C.null bytes
-  | n  > 1 = C.null bytes || hasFewerThan (n .- 1) (C.tail bytes)
+  | n == 1 = BLC.null bytes
+  | n  > 1 = BLC.null bytes || hasFewerThan (n .- 1) (BLC.tail bytes)
   | otherwise = False
 
 -- | @undoUTF32LE bytes offset@ decoded a UTF-32LE /bytes/ stream to Unicode
 -- chars.
-undoUTF32LE :: C.ByteString -> Int -> [(Int, Char)]
+undoUTF32LE :: BLC.ByteString -> Int -> [(Int, Char)]
 undoUTF32LE bytes offset
-  | C.null bytes = []
+  | BLC.null bytes = []
   | hasFewerThan 4 bytes = error "UTF-32LE input contains invalid number of bytes"
-  | otherwise = let first    = C.head bytes
-                    bytes'   = C.tail bytes
-                    second   = C.head bytes'
-                    bytes''  = C.tail bytes'
-                    third    = C.head bytes''
-                    bytes''' = C.tail bytes''
-                    fourth   = C.head bytes'''
-                    rest     = C.tail bytes'''
+  | otherwise = let first    = BLC.head bytes
+                    bytes'   = BLC.tail bytes
+                    second   = BLC.head bytes'
+                    bytes''  = BLC.tail bytes'
+                    third    = BLC.head bytes''
+                    bytes''' = BLC.tail bytes''
+                    fourth   = BLC.head bytes'''
+                    rest     = BLC.tail bytes'''
                 in (offset .+ 4,
                     chr $ (ord first)
                         .+ 256 .* ((ord second)
@@ -175,18 +178,18 @@ undoUTF32LE bytes offset
 
 -- | @undoUTF32BE bytes offset@ decoded a UTF-32BE /bytes/ stream to Unicode
 -- chars.
-undoUTF32BE :: C.ByteString -> Int -> [(Int, Char)]
+undoUTF32BE :: BLC.ByteString -> Int -> [(Int, Char)]
 undoUTF32BE bytes offset
-  | C.null bytes = []
+  | BLC.null bytes = []
   | hasFewerThan 4 bytes = error "UTF-32BE input contains invalid number of bytes"
-  | otherwise = let first    = C.head bytes
-                    bytes'   = C.tail bytes
-                    second   = C.head bytes'
-                    bytes''  = C.tail bytes'
-                    third    = C.head bytes''
-                    bytes''' = C.tail bytes''
-                    fourth   = C.head bytes'''
-                    rest     = C.tail bytes'''
+  | otherwise = let first    = BLC.head bytes
+                    bytes'   = BLC.tail bytes
+                    second   = BLC.head bytes'
+                    bytes''  = BLC.tail bytes'
+                    third    = BLC.head bytes''
+                    bytes''' = BLC.tail bytes''
+                    fourth   = BLC.head bytes'''
+                    rest     = BLC.tail bytes'''
                 in (offset .+ 4,
                     chr $ (ord fourth)
                         .+ 256 .* ((ord third)
@@ -224,36 +227,36 @@ combineSurrogates lead trail = chr $ (ord lead) .* 1024 .+ (ord trail) .+ surrog
 
 -- | @undoUTF18LE bytes offset@ decoded a UTF-16LE /bytes/ stream to Unicode
 -- chars.
-undoUTF16LE :: C.ByteString -> Int -> [(Int, Char)]
+undoUTF16LE :: BLC.ByteString -> Int -> [(Int, Char)]
 undoUTF16LE bytes offset
-  | C.null bytes = []
+  | BLC.null bytes = []
   | hasFewerThan 2 bytes = error "UTF-16LE input contains odd number of bytes"
-  | otherwise = let low    = C.head bytes
-                    bytes' = C.tail bytes
-                    high   = C.head bytes'
-                    rest   = C.tail bytes'
+  | otherwise = let low    = BLC.head bytes
+                    bytes' = BLC.tail bytes
+                    high   = BLC.head bytes'
+                    rest   = BLC.tail bytes'
                 in (offset .+ 2, chr $ (ord low) .+ (ord high) .* 256):(undoUTF16LE rest $ offset .+ 2)
 
 -- | @undoUTF18BE bytes offset@ decoded a UTF-16BE /bytes/ stream to Unicode
 -- chars.
-undoUTF16BE :: C.ByteString -> Int -> [(Int, Char)]
+undoUTF16BE :: BLC.ByteString -> Int -> [(Int, Char)]
 undoUTF16BE bytes offset
-  | C.null bytes = []
+  | BLC.null bytes = []
   | hasFewerThan 2 bytes = error "UTF-16BE input contains odd number of bytes"
-  | otherwise = let high   = C.head bytes
-                    bytes' = C.tail bytes
-                    low    = C.head bytes'
-                    rest   = C.tail bytes'
+  | otherwise = let high   = BLC.head bytes
+                    bytes' = BLC.tail bytes
+                    low    = BLC.head bytes'
+                    rest   = BLC.tail bytes'
                 in (offset .+ 2, chr $ (ord low) .+ (ord high) .* 256):(undoUTF16BE rest $ offset .+ 2)
 
 -- ** UTF-8 decoding
 
 -- | @undoUTF8 bytes offset@ decoded a UTF-8 /bytes/ stream to Unicode chars.
-undoUTF8 :: C.ByteString -> Int -> [(Int, Char)]
+undoUTF8 :: BLC.ByteString -> Int -> [(Int, Char)]
 undoUTF8 bytes offset
-  | C.null bytes = []
-  | otherwise = let first = C.head bytes
-                    rest  = C.tail bytes
+  | BLC.null bytes = []
+  | otherwise = let first = BLC.head bytes
+                    rest  = BLC.tail bytes
                 in case () of
                       _ | first < '\x80' -> (offset .+ 1, first):(undoUTF8 rest $ offset .+ 1)
                         | first < '\xC0' -> error $ "UTF-8 input contains invalid first byte"
@@ -265,11 +268,11 @@ undoUTF8 bytes offset
 -- | @decodeTwoUTF8 first offset bytes@ decodes a two-byte UTF-8 character,
 -- where the /first/ byte is already available and the second is the head of
 -- the /bytes/, and then continues to undo the UTF-8 encoding.
-decodeTwoUTF8 :: Char -> Int -> C.ByteString -> [(Int, Char)]
+decodeTwoUTF8 :: Char -> Int -> BLC.ByteString -> [(Int, Char)]
 decodeTwoUTF8 first offset bytes
-  | C.null bytes = error "UTF-8 double byte char is missing second byte at eof"
-  | otherwise = let second = C.head bytes
-                    rest   = C.tail bytes
+  | BLC.null bytes = error "UTF-8 double byte char is missing second byte at eof"
+  | otherwise = let second = BLC.head bytes
+                    rest   = BLC.tail bytes
                 in case () of
                       _ | second < '\x80' || '\xBF' < second -> error $ "UTF-8 double byte char has invalid second byte"
                         | otherwise                          -> (offset .+ 2, combineTwoUTF8 first second):(undoUTF8 rest $ offset .+ 2)
@@ -283,13 +286,13 @@ combineTwoUTF8 first second = chr(((ord first) .- 0xC0) .* 64
 -- | @decodeThreeUTF8 first offset bytes@ decodes a three-byte UTF-8 character,
 -- where the /first/ byte is already available and the second and third are the
 -- head of the /bytes/, and then continues to undo the UTF-8 encoding.
-decodeThreeUTF8 :: Char -> Int -> C.ByteString -> [(Int, Char)]
+decodeThreeUTF8 :: Char -> Int -> BLC.ByteString -> [(Int, Char)]
 decodeThreeUTF8 first offset bytes
   | hasFewerThan 2 bytes = error "UTF-8 triple byte char is missing bytes at eof"
-  | otherwise = let second = C.head bytes
-                    bytes' = C.tail bytes
-                    third  = C.head bytes'
-                    rest   = C.tail bytes'
+  | otherwise = let second = BLC.head bytes
+                    bytes' = BLC.tail bytes
+                    third  = BLC.head bytes'
+                    rest   = BLC.tail bytes'
                 in case () of
                       _ | second < '\x80' || '\xBF' < second -> error "UTF-8 triple byte char has invalid second byte"
                         | third < '\x80' || '\xBF' < third   -> error "UTF-8 triple byte char has invalid third byte"
@@ -305,15 +308,15 @@ combineThreeUTF8 first second third = chr(((ord first) .- 0xE0) .* 4096
 -- | @decodeFourUTF8 first offset bytes@ decodes a four-byte UTF-8 character,
 -- where the /first/ byte is already available and the second, third and fourth
 -- are the head of the /bytes/, and then continues to undo the UTF-8 encoding.
-decodeFourUTF8 :: Char -> Int -> C.ByteString -> [(Int, Char)]
+decodeFourUTF8 :: Char -> Int -> BLC.ByteString -> [(Int, Char)]
 decodeFourUTF8 first offset bytes
   | hasFewerThan 3 bytes = error "UTF-8 quad byte char is missing bytes at eof"
-  | otherwise = let second  = C.head bytes
-                    bytes'  = C.tail bytes
-                    third   = C.head bytes'
-                    bytes'' = C.tail bytes'
-                    fourth  = C.head bytes''
-                    rest    = C.tail bytes''
+  | otherwise = let second  = BLC.head bytes
+                    bytes'  = BLC.tail bytes
+                    third   = BLC.head bytes'
+                    bytes'' = BLC.tail bytes'
+                    fourth  = BLC.head bytes''
+                    rest    = BLC.tail bytes''
                 in case () of
                       _ | second < '\x80' || '\xBF' < second -> error "UTF-8 quad byte char has invalid second byte"
                         | third < '\x80' || '\xBF' < third   -> error "UTF-8 quad byte char has invalid third byte"
@@ -380,8 +383,9 @@ data Code = Bom             -- ^ BOM, contains \"@TF8@\", \"@TF16LE@\", \"@TF32B
           | Error           -- ^ Parsing error at this point.
           | Unparsed        -- ^ Unparsed due to errors (or at end of test).
           | Detected        -- ^ Detected parameter (for testing).
-  deriving Eq
+  deriving (Show,Eq)
 
+{-
 -- | @show code@ converts a 'Code' to the one-character YEAST token code char.
 -- The list of byte codes is also documented in the @yaml2yeast@ program.
 instance Show Code where
@@ -428,6 +432,7 @@ instance Show Code where
                    Error           -> "!"
                    Unparsed        -> "-"
                    Detected        -> "$"
+-}
 
 -- | Parsed token.
 data Token = Token {
@@ -437,8 +442,9 @@ data Token = Token {
     tLineChar   :: Int,   -- ^ 0-based character in line.
     tCode       :: Code,  -- ^ Specific token 'Code'.
     tText       :: String -- ^ Contained input chars, if any.
-  }
+  } deriving Show
 
+{-
 -- | @show token@ converts a 'Token' to two YEAST lines: a comment with the
 -- position numbers and the actual token line.
 instance Show Token where
@@ -447,6 +453,7 @@ instance Show Token where
             ++ ", L: " ++ (show $ token|>tLine)
             ++ ", c: " ++ (show $ token|>tLineChar) ++ "\n"
             ++ (show $ token|>tCode) ++ (escapeString $ token|>tText) ++ "\n"
+-}
 
 -- | @escapeString string@ escapes all the non-ASCII characters in the
 -- /string/, as well as escaping the \"@\\@\" character, using the \"@\\xXX@\",
@@ -466,10 +473,12 @@ toHex digits int
   | digits > 1  = (toHex (digits .- 1) (int `div` 16)) ++ [intToDigit $ int `mod` 16]
   | digits == 1 = [intToDigit int]
 
+{-
 -- | @showTokens tokens@ converts a list of /tokens/ to a multi-line YEAST
 -- text.
 showTokens :: [Token] -> String
 showTokens tokens = foldr (\ token text -> (show token) ++ text) "" tokens
+-}
 
 -- * Parsing framework
 --
@@ -577,7 +586,7 @@ instance Show State where
 
 -- | @initialState name input@ returns an initial 'State' for parsing the
 -- /input/ (with /name/ for error messages).
-initialState :: String -> C.ByteString -> State
+initialState :: String -> BLC.ByteString -> State
 initialState name input = let (encoding, decoded) = decode input
                           in State { sName            = name,
                                      sEncoding        = encoding,
@@ -1240,7 +1249,7 @@ instance Read Chomp where
 -- @True@). Note that tokens are available \"immediately\", allowing for
 -- streaming of large YAML files with memory requirements depending only on the
 -- YAML nesting level.
-type Tokenizer = String -> C.ByteString -> Bool -> [Token]
+type Tokenizer = String -> BLC.ByteString -> Bool -> [Token]
 
 -- | @patternTokenizer pattern@ converts the /pattern/ to a simple 'Tokenizer'.
 patternTokenizer :: Pattern -> Tokenizer
