@@ -1,2 +1,4 @@
 /dist/
+/.ghc.environment.*
+/dist-newstyle/
 *~

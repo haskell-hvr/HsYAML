@@ -1,24 +1,31 @@
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE RecursiveDo                #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
-module Data.YAML where
+module Data.YAML
+    ( decodeLoader, Loader(..), NodeId
+    , decodeNode, decodeNode', Doc(..), Node(..)
+    ) where
 
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as BS.L
-import           Data.Map             (Map)
-import qualified Data.Map             as M
-import           Data.Text            (Text)
-import qualified Data.Text            as T
-import qualified Data.YAML.Event      as YE
-import qualified Data.YAML.Internal   as Y
-
-import           Data.YAML.Event      (Tag)
+import qualified Data.ByteString.Lazy  as BS.L
+import           Data.Functor.Identity
+import           Data.Map              (Map)
+import qualified Data.Map              as Map
+import           Data.Set              (Set)
+import qualified Data.Set              as Set
+import           Data.Text             (Text)
+import           Data.YAML.Event       (Tag)
+import qualified Data.YAML.Event       as YE
 
 import           Control.Applicative
 import           Control.Monad.Except
+-- import           Control.Monad.Fix
 import           Control.Monad.State
 
+{-
 -- TODO: this is the JSON-ish semantic data-model; we need a YAML AST at some point
 data Value = Object !(Map Text Value)
            | Array  [Value]
@@ -27,35 +34,32 @@ data Value = Object !(Map Text Value)
            | Bool   !Bool
            | Null
            deriving (Ord,Eq)
+-}
 
-decode :: BS.ByteString -> Maybe Value
-decode bs0 = go (Y.yaml "" (BS.L.fromStrict bs0) False)
-  where
-    go toks = error (show toks)
+----------------------------------------------------------------------------
 
+data S n = S { sEvs   :: [YE.Event]
+             , sDict  :: Map YE.Anchor (Word,n)
+             , sCycle :: Set YE.Anchor
+             , sIdCnt :: !Word
+             }
 
-testParse :: BS.ByteString -> IO ()
-testParse bs0 = mapM_  print $ Y.yaml "<stdin>" (BS.L.fromStrict bs0) True
+newtype PT n m a = PT (StateT (S n) (ExceptT String m) a)
+                 deriving ( Functor
+                          , Applicative
+                          , Monad
+                          , MonadState (S n)
+                          , MonadError String
+                          , MonadFix
+                          )
 
--- failsafe schema
-data Node = Scalar !Tag !Text
-          | Mapping !Tag (Map Node Node)
-          | Sequence !Tag [Node]
-          deriving (Eq,Ord,Show)
+instance MonadTrans (PT n) where
+  lift = PT . lift . lift
 
+runParserT :: Monad m => PT n m a -> [YE.Event] -> m (Either String a)
+runParserT (PT act) s0 = runExceptT $ evalStateT act (S s0 mempty mempty 0)
 
--- type P a = [YE.Event] -> Either String ([YE.Event],a)
-
-data S n = S { sEvs :: [YE.Event]
-           , sDict  :: Map YE.Anchor n
-           }
-
-type P n a = StateT (S n) (Either String) a
-
-runParser :: P n a -> [YE.Event] -> Either String a
-runParser act s0 = evalStateT act (S s0 mempty)
-
-satisfy :: (YE.Event -> Bool) -> P n YE.Event
+satisfy :: Monad m => (YE.Event -> Bool) -> PT n m YE.Event
 satisfy p = do
   s0 <- get
   case sEvs s0 of
@@ -66,20 +70,20 @@ satisfy p = do
        | otherwise -> throwError ("satisfy: predicate failed " ++ show ev)
 
 
-peek :: P n (Maybe YE.Event)
+peek :: Monad m => PT n m (Maybe YE.Event)
 peek = do
   s0 <- get
   case sEvs s0 of
     []     -> return Nothing
     (ev:_) -> return (Just ev)
 
-peek1 :: P n YE.Event
+peek1 :: Monad m => PT n m YE.Event
 peek1 = maybe (throwError "peek1: premature eof") return =<< peek
 
-anyEv :: P n YE.Event
+anyEv :: Monad m => PT n m YE.Event
 anyEv = satisfy (const True)
 
-eof :: P n ()
+eof :: Monad m => PT n m ()
 eof = do
   s0 <- get
   case sEvs s0 of
@@ -87,72 +91,145 @@ eof = do
     _  -> throwError "eof expected"
 
 -- NB: consumes the end-event
-manyUnless :: (YE.Event -> Bool) -> P n a -> P n [a]
-manyUnless pred act = do
+manyUnless :: Monad m => (YE.Event -> Bool) -> PT n m a -> PT n m [a]
+manyUnless p act = do
   t0 <- peek1
-  if pred t0
+  if p t0
     then anyEv >> return []
-    else liftA2 (:) act (manyUnless pred act)
+    else liftA2 (:) act (manyUnless p act)
 
 
-data Loader nodeTy = Loader
-  { yScalar   :: Tag -> YE.Style -> Text ->  Either String nodeTy
-  , ySequence :: Tag -> [nodeTy] ->          Either String nodeTy
-  , yMapping  :: Tag -> [(nodeTy,nodeTy)] -> Either String nodeTy
+type NodeId = Word
+
+data Loader m n = Loader
+  { yScalar   :: Tag -> YE.Style -> Text -> m (Either String n)
+  , ySequence :: Tag -> [n]              -> m (Either String n)
+  , yMapping  :: Tag -> [(n,n)]          -> m (Either String n)
+  , yAlias    :: NodeId -> Bool -> n     -> m (Either String n)
+  , yAnchor   :: NodeId -> n             -> m (Either String n)
   }
 
-failsafeLoader :: Loader Node
-failsafeLoader = Loader { yScalar   = \t _ v -> Right (Scalar t v)
-                        , ySequence = \t vs  -> Right (Sequence t vs)
-                        , yMapping  = \t kvs -> Right (Mapping t (M.fromList kvs))
-                        }
 
-decodeLoader :: forall n . Loader n -> BS.L.ByteString -> Either String [n]
-decodeLoader Loader{..} = either (\(_,err) -> Left err) (runParser goStream) . sequence . YE.parseEvents
+{-# INLINEABLE decodeLoader #-}
+decodeLoader :: forall n m . MonadFix m => Loader m n -> BS.L.ByteString -> m (Either String [n])
+decodeLoader Loader{..} bs0 = do
+    case sequence . YE.parseEvents $ bs0 of
+      Left (_,err) -> pure (Left err)
+      Right evs    -> runParserT goStream evs
   where
+    goStream :: PT n m [n]
     goStream = do
-      satisfy (== YE.StreamStart)
+      _ <- satisfy (== YE.StreamStart)
       ds <- manyUnless (== YE.StreamEnd) goDoc
       eof
       return ds
 
+    goDoc :: PT n m n
     goDoc = do
-      satisfy (== YE.DocumentStart)
-      modify $ \s0 -> s0 { sDict = mempty }
+      _ <- satisfy isDocStart
+      modify $ \s0 -> s0 { sDict = mempty, sCycle = mempty }
       n <- goNode
-      satisfy (== YE.DocumentEnd)
+      _ <- satisfy isDocEnd
       return n
 
-    returnNode :: (Maybe YE.Anchor) -> Either String n -> P n n
+    getNewNid :: PT n m Word
+    getNewNid = state $ \s0 -> let i0 = sIdCnt s0
+                               in (i0, s0 { sIdCnt = i0+1 })
+
+    returnNode :: (Maybe YE.Anchor) -> Either String n -> PT n m n
     returnNode _ (Left err) = throwError err
     returnNode Nothing (Right node) = return node
     returnNode (Just a) (Right node) = do
-      modify $ \s0 -> s0 { sDict = M.insert a node (sDict s0) }
-      return node
+      nid <- getNewNid
+      node0 <- lift $ yAnchor nid node
+      node' <- liftEither node0
+      modify $ \s0 -> s0 { sDict = Map.insert a (nid,node') (sDict s0) }
+      return node'
 
+    registerAnchor :: Maybe YE.Anchor -> PT n m n -> PT n m n
+    registerAnchor Nothing  pn = pn
+    registerAnchor (Just a) pn = do
+      modify $ \s0 -> s0 { sCycle = Set.insert a (sCycle s0) }
+      nid <- getNewNid
+
+      mdo
+        modify $ \s0 -> s0 { sDict = Map.insert a (nid,n) (sDict s0) }
+        n0 <- pn
+        n1 <- lift $ yAnchor nid n0
+        n <-  liftEither n1
+        return n
+
+    exitAnchor :: Maybe YE.Anchor -> PT n m ()
+    exitAnchor Nothing = return ()
+    exitAnchor (Just a) = modify $ \s0 -> s0 { sCycle = Set.delete a (sCycle s0) }
+
+    goNode :: PT n m n
     goNode = do
       n <- satisfy (const True)
       case n of
         YE.Scalar manc tag sty val -> do
-          returnNode manc $! yScalar tag sty val
-        YE.SequenceStart manc tag -> do
-          ns <- manyUnless (== YE.SequenceEnd) goNode
-          returnNode manc $! ySequence tag ns
+          exitAnchor manc
+          n' <- lift $ yScalar tag sty val
+          returnNode manc $! n'
 
-        YE.MappingStart manc tag -> do
+        YE.SequenceStart manc tag -> registerAnchor manc $ do
+          ns <- manyUnless (== YE.SequenceEnd) goNode
+          exitAnchor manc
+          liftEither =<< (lift $ ySequence tag ns)
+
+        YE.MappingStart manc tag -> registerAnchor manc $ do
           kvs <- manyUnless (== YE.MappingEnd) (liftM2 (,) goNode goNode)
-          returnNode manc $! yMapping tag kvs
+          exitAnchor manc
+          liftEither =<< (lift $ yMapping tag kvs)
 
         YE.Alias a -> do
           d <- gets sDict
-          case M.lookup a d of
+          cy <- gets sCycle
+          case Map.lookup a d of
             Nothing -> throwError ("anchor not found: " ++ show a)
-            Just n  -> return n
+            Just (nid,n') -> liftEither =<< (lift $ yAlias nid (Set.member a cy) n')
 
         _ -> throwError "goNode: unexpected event"
 
 
 newtype Doc n = Doc n deriving (Eq,Ord,Show)
 
+-- failsafe schema
+data Node = Scalar !Tag !Text
+          | Mapping !Tag (Map Node Node)
+          | Sequence !Tag [Node]
+          | Anchor !NodeId !Node
+          deriving (Eq,Ord,Show)
+
 decodeNode :: BS.L.ByteString -> Either String [Doc Node]
-decodeNode bs0 = map Doc <$> decodeLoader failsafeLoader bs0
+decodeNode bs0 = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
+  where
+    failsafeLoader = Loader { yScalar   = \t _ v -> pure $ Right (Scalar t v)
+                            , ySequence = \t vs  -> pure $ Right (Sequence t vs)
+                            , yMapping  = \t kvs -> pure $ Right (Mapping t (Map.fromList kvs))
+                            , yAlias    = \_ _ n -> pure $ Right n
+                            , yAnchor   = \j n   -> pure $ Right (Anchor j n)
+                            }
+
+decodeNode' :: BS.L.ByteString -> Either String [Doc Node]
+decodeNode' bs0 = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
+  where
+    failsafeLoader = Loader { yScalar   = \t _ v -> pure $ Right (Scalar t v)
+                            , ySequence = \t vs  -> pure $ Right (Sequence t vs)
+                            , yMapping  = \t kvs -> pure $ Right (Mapping t (Map.fromList kvs))
+                            , yAlias    = \_ c n -> pure $ if c then Left "cycle detected" else Right n
+                            , yAnchor   = \_ n   -> pure $ Right n
+                            }
+
+{-
+tryError :: MonadError e m => m a -> m (Either e a)
+tryError act = catchError (Right <$> act) (pure . Left)
+-}
+
+isDocStart :: YE.Event -> Bool
+isDocStart (YE.DocumentStart _) = True
+isDocStart _                    = False
+
+isDocEnd :: YE.Event -> Bool
+isDocEnd (YE.DocumentEnd _) = True
+isDocEnd _                  = False

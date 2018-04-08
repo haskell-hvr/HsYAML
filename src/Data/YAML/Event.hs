@@ -4,12 +4,17 @@ module Data.YAML.Event
     , Tag
     , Anchor
     , parseEvents
+    , EvStream
     ) where
 
 import qualified Data.ByteString.Lazy as BS.L
+import           Data.Char
+import           Data.Map             (Map)
+import qualified Data.Map             as Map
 import           Data.Text            (Text)
 import qualified Data.Text            as T
 import qualified Data.YAML.Internal   as Y
+import           Numeric              (readHex)
 
 -- basic libyaml event types
 -- TODO: consider also non-essential attributes
@@ -30,23 +35,21 @@ mapping  ::= MappingStart (node node)* MappingEnd
 data Event
     = StreamStart
     | StreamEnd
-    | DocumentStart
-    | DocumentEnd
+    | DocumentStart !Bool
+    | DocumentEnd !Bool
     | Alias          !Anchor
-    | Scalar         !OptAnchor  !Tag  !Style  !Text
-    | SequenceStart  !OptAnchor  !Tag
+    | Scalar         !(Maybe Text)  !Tag  !Style  !Text
+    | SequenceStart  !(Maybe Text)  !Tag
     | SequenceEnd
-    | MappingStart   !OptAnchor  !Tag
+    | MappingStart   !(Maybe Text)  !Tag
     | MappingEnd
     deriving (Show, Eq)
 
 type Anchor = Text
 
-type OptAnchor = Maybe Anchor
-
 type Tag = Maybe Text
 
-type Props = (OptAnchor,Tag)
+type Props = (Maybe Text,Tag)
 
 type EvStream = [Either (Int,String) Event]
 
@@ -57,8 +60,30 @@ data Style = Plain
            | Folded
            deriving (Eq,Show)
 
+type TagHandle = Text
+
+tagUnescape :: Text -> Text
+tagUnescape = T.pack . go . T.unpack
+  where
+    go [] = []
+    go ('%':h:l:cs)
+      | Just c <- decodeL1 [h,l] = c : go cs
+    go (c:cs) = c : go cs
+
+getHandle :: [Y.Token] -> Maybe (TagHandle,[Y.Token])
+getHandle toks0 = do
+  Y.Token { Y.tCode = Y.BeginHandle } : toks1 <- Just toks0
+  (hs,Y.Token { Y.tCode = Y.EndHandle } : toks2) <- Just $ span (\Y.Token { Y.tCode = c } -> c `elem` [Y.Indicator,Y.Meta]) toks1
+  pure (T.pack $ concatMap Y.tText hs, toks2)
+
+getUriTag :: [Y.Token] -> Maybe (Text,[Y.Token])
+getUriTag toks0 = do
+  Y.Token { Y.tCode = Y.BeginTag } : toks1 <- Just toks0
+  (hs,Y.Token { Y.tCode = Y.EndTag } : toks2) <- Just $ span (\Y.Token { Y.tCode = c } -> c `elem` [Y.Indicator,Y.Meta]) toks1
+  pure (T.pack $ concatMap Y.tText hs, toks2)
+
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . isWhite) (Y.yaml "" bs0 False))
+parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) (Y.yaml "" bs0 False))
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -66,23 +91,55 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
       | otherwise = skipPast tc ts
     skipPast _ [] = error "the impossible happened"
 
-    err :: Tok2EvStream
-    err (Y.Token { Y.tCode = Y.Error, Y.tByteOffset = ofs, Y.tText = msg } : _) = [Left (ofs, msg)]
-    err (Y.Token { Y.tByteOffset = ofs } : _) = [Left (ofs, "")]
-    err [] = [Left (-1,"Unexpected end of token stream")]
 
-    go0 :: Tok2EvStream
-    go0 [] = [Right StreamEnd]
-    go0 (Y.Token { Y.tCode = Y.White } : _) = error "the impossible happened"
-    go0 (Y.Token { Y.tCode = Y.Indicator } : rest) = go0 rest -- ignore indicators here
-    go0 (Y.Token { Y.tCode = Y.DirectivesEnd } : rest) = go0 rest
-    go0 (Y.Token { Y.tCode = Y.BeginDocument } : rest) = Right DocumentStart : go0 rest
-    go0 (Y.Token { Y.tCode = Y.EndDocument } : rest) = Right DocumentEnd : go0 rest
-    go0 (Y.Token { Y.tCode = Y.DocumentEnd } : rest) = go0 rest
-    go0 (Y.Token { Y.tCode = Y.BeginNode } : rest) = goNode rest go0
-    go0 (Y.Token { Y.tCode = Y.BeginDirective } : rest) = go0 $ skipPast Y.EndDirective rest -- TODO
-    go0 xs = err xs
+    isWhite :: Y.Token -> Bool
+    isWhite (Y.Token { Y.tCode = Y.White })  = True
+    isWhite (Y.Token { Y.tCode = Y.Indent }) = True
+    isWhite (Y.Token { Y.tCode = Y.Break })  = True
+    isWhite _                                = False
 
+    goDir :: Map TagHandle Text -> [Y.Token] -> EvStream
+    goDir m (Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
+             Y.Token { Y.tCode = Y.Meta, Y.tText = "YAML" } :
+             Y.Token { Y.tCode = Y.Meta } :
+             Y.Token { Y.tCode = Y.EndDirective } :
+             rest) = go0 m rest
+
+    goDir m (Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
+             Y.Token { Y.tCode = Y.Meta, Y.tText = "TAG" } :
+             rest)
+      | Just (h, rest') <- getHandle rest
+      , Just (t, rest'') <- getUriTag rest' = go0 (Map.insert h t m) (skipPast Y.EndDirective rest'')
+
+    goDir m (Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
+             Y.Token { Y.tCode = Y.Meta, Y.tText = l } :
+             rest) | l `notElem` ["TAG","YAML"] = go0 m (skipPast Y.EndDirective rest)
+    goDir _ xs                                            = err xs
+
+    go0 :: Map.Map TagHandle Text -> Tok2EvStream
+    go0 _ [] = [Right StreamEnd]
+    go0 _ (Y.Token { Y.tCode = Y.White } : _) = error "the impossible happened"
+    go0 m (Y.Token { Y.tCode = Y.Indicator } : rest) = go0 m rest -- ignore indicators here
+    go0 m (Y.Token { Y.tCode = Y.DirectivesEnd } : rest) = go0 m rest
+    go0 m (Y.Token { Y.tCode = Y.BeginDocument } : Y.Token { Y.tCode = Y.DirectivesEnd } : rest) = Right (DocumentStart True) : go0 m rest -- hack
+    go0 m (Y.Token { Y.tCode = Y.BeginDocument } : rest@(Y.Token { Y.tCode = Y.BeginDirective } : _)) = Right (DocumentStart True) : go0 m rest -- hack
+    go0 m (Y.Token { Y.tCode = Y.BeginDocument } : rest) = Right (DocumentStart False) : go0 m rest
+    go0 m (Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = Right (DocumentEnd True) : go0 m rest
+    go0 m (Y.Token { Y.tCode = Y.EndDocument } : rest) = Right (DocumentEnd False) : go0 m rest
+    go0 m (Y.Token { Y.tCode = Y.DocumentEnd } : rest) = go0 m rest
+    go0 m (Y.Token { Y.tCode = Y.BeginNode } : rest) = goNode0 m rest (go0 m)
+    go0 m (Y.Token { Y.tCode = Y.BeginDirective } : rest) = goDir m rest
+    go0 _ xs = err xs
+
+err :: Tok2EvStream
+err (Y.Token { Y.tCode = Y.Error, Y.tByteOffset = ofs, Y.tText = msg } : _) = [Left (ofs, msg)]
+err (Y.Token { Y.tByteOffset = ofs } : _) = [Left (ofs, "")]
+err [] = [Left (-1,"Unexpected end of token stream")]
+
+
+goNode0 :: Map TagHandle Text -> Tok2EvStreamCont
+goNode0 tagmap = goNode
+  where
     goNode :: Tok2EvStreamCont
     goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar mempty rest (flip goNodeEnd cont)
     goNode (Y.Token { Y.tCode = Y.BeginSequence } : rest) cont = Right (SequenceStart Nothing Nothing) : goSeq rest (flip goNodeEnd cont)
@@ -119,22 +176,29 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
     goAnchor _ xs _ = err xs
 
     goTag :: Props -> [Y.Token] -> (Props -> [Y.Token] -> EvStream) -> EvStream
+
     goTag (anchor,_) (Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
           cont = cont (anchor,Just $! T.pack "!") rest
+
     goTag (anchor,_) (Y.Token { Y.tCode = Y.BeginHandle } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.EndHandle } :
                       Y.Token { Y.tCode = Y.Meta, Y.tText = tag } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
-          cont = cont (anchor,Just $! T.pack ("tag:yaml.org,2002:" ++ tag)) rest
+          cont
+            | Just t' <- Map.lookup (T.pack ("!!")) tagmap
+              = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
+            | otherwise = cont (anchor,Just $! T.pack ("tag:yaml.org,2002:" ++ tag)) rest
+
     goTag (anchor,_) (Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "<" } :
                       Y.Token { Y.tCode = Y.Meta, Y.tText = tag } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = ">" } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
-          cont = cont (anchor,Just $! T.pack tag) rest
+          cont = cont (anchor,mkTag tag) rest
+
     goTag (anchor,_) (Y.Token { Y.tCode = Y.BeginHandle } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.Meta, Y.tText = h } :
@@ -142,14 +206,23 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
                       Y.Token { Y.tCode = Y.EndHandle } :
                       Y.Token { Y.tCode = Y.Meta, Y.tText = tag } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
-          cont = cont (anchor,Just $! T.pack ("!" ++ h ++ "!" ++ tag)) rest -- TODO: handle lookup
+          cont
+            | Just t' <- Map.lookup (T.pack ("!" ++ h ++ "!")) tagmap
+              = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
+            | otherwise = cont (anchor,Just $! T.pack ("!" ++ h ++ "!" ++ tag)) rest -- unresolved
+
     goTag (anchor,_) (Y.Token { Y.tCode = Y.BeginHandle } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.EndHandle } :
                       Y.Token { Y.tCode = Y.Meta, Y.tText = tag } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
-          cont = cont (anchor,Just $! T.pack ('!' : tag)) rest
+          cont
+            | Just t' <- Map.lookup (T.pack ("!")) tagmap
+              = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
+            | otherwise = cont (anchor,Just $! T.pack ('!' : tag)) rest -- unresolved
     goTag _ xs _ = err xs
+
+    mkTag = Just . tagUnescape . T.pack
 
     goScalar :: Props -> Tok2EvStreamCont
     goScalar (manchor,tag) toks0 cont = go' "" Plain toks0
@@ -157,6 +230,42 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
         go' acc sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest) = go'  (acc ++ t) sty rest
         go' acc sty (Y.Token { Y.tCode = Y.LineFold } : rest) = go'  (acc ++ " ") sty rest
         go' acc sty (Y.Token { Y.tCode = Y.LineFeed } : rest) = go'  (acc ++ "\n") sty rest
+
+        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+                     Y.Token { Y.tCode = Y.Indicator, Y.tText = "'" } :
+                     Y.Token { Y.tCode = Y.Meta, Y.tText = "'" } :
+                     Y.Token { Y.tCode = Y.EndEscape } :
+                     rest) = go'  (acc ++ "'") sty rest
+
+        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+                     Y.Token { Y.tCode = Y.Indicator, Y.tText = "\\" } :
+--                     Y.Token { Y.tCode = Y.Break } :
+                     Y.Token { Y.tCode = Y.EndEscape } :
+                     rest) = go' acc sty rest -- end-line
+
+        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+                     Y.Token { Y.tCode = Y.Indicator, Y.tText = "\\" } :
+                     Y.Token { Y.tCode = Y.Meta, Y.tText = t } :
+                     Y.Token { Y.tCode = Y.EndEscape } :
+                     rest)
+          | t == "n"  = go'  (acc ++ "\n") sty rest
+          | t == "r"  = go'  (acc ++ "\r") sty rest
+          | t == "t"  = go'  (acc ++ "\t") sty rest
+          | t == "b"  = go'  (acc ++ "\b") sty rest
+          | t == "/"  = go'  (acc ++ t) sty rest
+          | t == " "  = go'  (acc ++ t) sty rest
+          | t == "\\"  = go'  (acc ++ t) sty rest
+          | t == "\"" = go'  (acc ++ t) sty rest
+
+        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+                     Y.Token { Y.tCode = Y.Indicator, Y.tText = "\\" } :
+                     Y.Token { Y.tCode = Y.Indicator, Y.tText = pfx } :
+                     Y.Token { Y.tCode = Y.Meta, Y.tText = ucode } :
+                     Y.Token { Y.tCode = Y.EndEscape } :
+                     rest)
+          | pfx == "u", Just c <- decodeCP ucode = go' (acc ++ [c]) sty rest
+          | pfx == "x", Just c <- decodeL1 ucode = go' (acc ++ [c]) sty rest
+
         go' acc sty (Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest)
           | "'"  <- ind = go' acc SingleQuoted rest
           | "\"" <- ind = go' acc DoubleQuoted rest
@@ -164,12 +273,15 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
           | ">"  <- ind = go' acc Folded rest
           | otherwise   = go' acc sty rest
         go' acc sty (Y.Token { Y.tCode = Y.EndScalar } : rest) = Right (Scalar manchor tag sty (T.pack acc)) : cont rest
+        go' _ _ xs | False = error (show xs)
         go' _ _ xs = err xs
 
     goSeq :: Tok2EvStreamCont
     goSeq (Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right SequenceEnd : cont rest
     goSeq (Y.Token { Y.tCode = Y.BeginNode } : rest) cont = goNode rest (flip goSeq cont)
+    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart Nothing Nothing) : goMap rest (flip goSeq cont)
     goSeq (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goSeq rest cont
+--    goSeq xs _cont = error (show xs)
     goSeq xs _cont = err xs
 
     goMap :: Tok2EvStreamCont
@@ -189,12 +301,6 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
     goPairEnd (Y.Token { Y.tCode = Y.EndPair } : rest) cont = cont rest
     goPairEnd xs _cont                                      = err xs
 
-    isWhite :: Y.Token -> Bool
-    isWhite (Y.Token { Y.tCode = Y.White })  = True
-    isWhite (Y.Token { Y.tCode = Y.Indent }) = True
-    isWhite (Y.Token { Y.tCode = Y.Break })  = True
-    isWhite _                                = False
-
 
 stripComments :: [Y.Token] -> [Y.Token]
 stripComments (Y.Token { Y.tCode = Y.BeginComment } : rest) = skip rest
@@ -210,3 +316,18 @@ type Tok2EvStream = [Y.Token] -> EvStream
 type Tok2EvStreamCont = [Y.Token] -> Cont EvStream [Y.Token]
 
 type Cont r a = (a -> r) -> r
+
+
+-- decode 4-hex-digit unicode code-point
+decodeCP :: String -> Maybe Char
+decodeCP s = case s of
+               [_,_,_,_] | all isHexDigit s
+                         , [(j, "")] <- readHex s -> Just (chr (fromInteger j))
+               _ -> Nothing
+
+-- decode 2-hex-digit latin1 code-point
+decodeL1 :: String -> Maybe Char
+decodeL1 s = case s of
+               [_,_] | all isHexDigit s
+                     , [(j, "")] <- readHex s -> Just (chr (fromInteger j))
+               _ -> Nothing
