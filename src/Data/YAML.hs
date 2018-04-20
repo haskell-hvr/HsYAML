@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -24,6 +25,11 @@ import           Control.Applicative
 import           Control.Monad.Except
 -- import           Control.Monad.Fix
 import           Control.Monad.State
+
+#if !MIN_VERSION_mtl(2,2,2)
+liftEither :: MonadError e m => Either e a -> m a
+liftEither = either throwError return
+#endif
 
 {-
 -- TODO: this is the JSON-ish semantic data-model; we need a YAML AST at some point
