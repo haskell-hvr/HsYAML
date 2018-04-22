@@ -35,13 +35,13 @@ mapping  ::= MappingStart (node node)* MappingEnd
 data Event
     = StreamStart
     | StreamEnd
-    | DocumentStart !Bool
-    | DocumentEnd !Bool
+    | DocumentStart  !Bool
+    | DocumentEnd    !Bool
     | Alias          !Anchor
-    | Scalar         !(Maybe Text)  !Tag  !Style  !Text
-    | SequenceStart  !(Maybe Text)  !Tag
+    | Scalar         !(Maybe Anchor)  !Tag  !Style  !Text
+    | SequenceStart  !(Maybe Anchor)  !Tag
     | SequenceEnd
-    | MappingStart   !(Maybe Text)  !Tag
+    | MappingStart   !(Maybe Anchor)  !Tag
     | MappingEnd
     deriving (Show, Eq)
 
@@ -124,9 +124,9 @@ parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (
     go0 m (Y.Token { Y.tCode = Y.BeginDocument } : Y.Token { Y.tCode = Y.DirectivesEnd } : rest) = Right (DocumentStart True) : go0 m rest -- hack
     go0 m (Y.Token { Y.tCode = Y.BeginDocument } : rest@(Y.Token { Y.tCode = Y.BeginDirective } : _)) = Right (DocumentStart True) : go0 m rest -- hack
     go0 m (Y.Token { Y.tCode = Y.BeginDocument } : rest) = Right (DocumentStart False) : go0 m rest
-    go0 m (Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = Right (DocumentEnd True) : go0 m rest
-    go0 m (Y.Token { Y.tCode = Y.EndDocument } : rest) = Right (DocumentEnd False) : go0 m rest
-    go0 m (Y.Token { Y.tCode = Y.DocumentEnd } : rest) = go0 m rest
+    go0 _ (Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = Right (DocumentEnd True) : go0 mempty rest
+    go0 _ (Y.Token { Y.tCode = Y.EndDocument } : rest) = Right (DocumentEnd False) : go0 mempty rest
+    go0 m (Y.Token { Y.tCode = Y.DocumentEnd } : rest) = go0 m rest -- should not occur
     go0 m (Y.Token { Y.tCode = Y.BeginNode } : rest) = goNode0 m rest (go0 m)
     go0 m (Y.Token { Y.tCode = Y.BeginDirective } : rest) = goDir m rest
     go0 _ xs = err xs
@@ -199,7 +199,7 @@ goNode0 tagmap = goNode
                       Y.Token { Y.tCode = Y.EndTag } : rest)
           cont = cont (anchor,mkTag tag) rest
 
-    goTag (anchor,_) (Y.Token { Y.tCode = Y.BeginHandle } :
+    goTag (anchor,_) xs@(Y.Token { Y.tCode = Y.BeginHandle } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.Meta, Y.tText = h } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
@@ -209,7 +209,7 @@ goNode0 tagmap = goNode
           cont
             | Just t' <- Map.lookup (T.pack ("!" ++ h ++ "!")) tagmap
               = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
-            | otherwise = cont (anchor,Just $! T.pack ("!" ++ h ++ "!" ++ tag)) rest -- unresolved
+            | otherwise = err xs
 
     goTag (anchor,_) (Y.Token { Y.tCode = Y.BeginHandle } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
