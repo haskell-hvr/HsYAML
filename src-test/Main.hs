@@ -1,7 +1,9 @@
 module Main where
 
 import           Control.Monad
+import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.L
+import           Data.Maybe
 import           System.Directory
 import           System.Environment
 import           System.Exit
@@ -9,9 +11,12 @@ import           System.FilePath
 import           System.IO
 
 import qualified Data.Text                  as T
+import qualified Data.Text.Encoding         as T
 import           Data.YAML
 import           Data.YAML.Event            as YE
 import qualified Data.YAML.Internal         as YI
+
+import           TML
 
 main :: IO ()
 main = do
@@ -23,14 +28,14 @@ main = do
       | otherwise -> do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
-    ("testmode":args') -> cmdTestmode args'
+    ("run-tml":args') -> cmdRunTml args'
     _ -> do
       hPutStrLn stderr "usage: yaml-test <command> [<args>]"
       hPutStrLn stderr ""
       hPutStrLn stderr "Commands:"
       hPutStrLn stderr ""
       hPutStrLn stderr "  yaml2event       reads YAML stream from STDIN and dumps events to STDOUT"
-      hPutStrLn stderr "  testmode         internal test-mode"
+      hPutStrLn stderr "  run-tml          run/validate .tml file(s)"
       exitFailure
 
 
@@ -47,58 +52,85 @@ cmdYaml2Event = do
       hPutStrLn stdout (ev2str event)
       hFlush stdout
 
-cmdTestmode :: [FilePath] -> IO ()
-cmdTestmode args = do
-  forM_ args $ \d -> do
-    let inYaml = d </> "in.yaml"
-        testEv = d </> "test.event"
 
-    exInput <- (&&) <$> doesFileExist inYaml <*> doesFileExist testEv
+cmdRunTml :: [FilePath] -> IO ()
+cmdRunTml args = do
+  results <- forM args $ \fn -> do
+    tml <- BS.readFile fn
 
-    when exInput $ do
-      print inYaml
-      inYamlDat <- BS.L.readFile inYaml
-      testEvDat <- lines <$> readFile testEv
+    hPutStr stdout (fn ++ " : ")
+    hFlush stdout
 
-      isErr <- doesFileExist $ d </> "error"
+    (label, dats) <- maybe (fail ("failed to parse " ++ fn)) pure $ decodeTml tml
 
-      case sequence (parseEvents inYamlDat) of
-        Left err
-          | isErr -> do
-              putStrLn "OK! (error)"
-          | otherwise -> do
-              print ("FAIL", err)
-              putStrLn ""
-              print testEvDat
-              putStrLn ""
-              BS.L.putStrLn inYamlDat
-              putStrLn ""
-              testParse inYamlDat
-              putStrLn ""
-              forM_ (parseEvents inYamlDat) print
-              putStrLn ""
-              putStrLn "----------------------------------------------------------------------------"
-        Right evs' -> do
-          let evs'' = map ev2str evs'
-          if evs'' == testEvDat
-             then putStrLn "OK!"
-             else do
-               putStrLn "FAIL!"
-               when isErr $
-                 putStrLn "(unexpected parser success)"
-               print testEvDat
-               print evs''
-               putStrLn ""
-               testParse inYamlDat
-               putStrLn ""
-               forM_ (parseEvents inYamlDat) print
-               putStrLn ""
-               putStrLn "----------------------------------------------------------------------------"
-      putStrLn ""
+    let isErr = isJust (lookup "error" dats)
 
-      return ()
+        Just inYamlDat = BS.L.fromStrict   <$> lookup "in.yaml" dats
+        Just testEvDat = lines . T.unpack . T.decodeUtf8 <$> lookup "test.event" dats
 
-  return ()
+    case sequence (parseEvents inYamlDat) of
+      Left err
+        | isErr -> do
+            putStrLn "OK! (error)"
+            pure True
+        | otherwise -> do
+            putStrLn "FAIL!"
+            putStrLn ""
+            putStrLn "----------------------------------------------------------------------------"
+            putStrLn' (BS.unpack label)
+            putStrLn ""
+            putStrLn' (show err)
+            putStrLn ""
+            putStrLn' (show testEvDat)
+            putStrLn ""
+            BS.L.putStr inYamlDat
+            putStrLn ""
+            testParse inYamlDat
+            putStrLn ""
+            -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
+            putStrLn ""
+            putStrLn "----------------------------------------------------------------------------"
+            putStrLn ""
+            pure False
+
+      Right evs' -> do
+        let evs'' = map ev2str evs'
+        if evs'' == testEvDat
+           then do
+             putStrLn "OK!"
+             pure True
+
+           else do
+             if isErr
+               then putStrLn "FAIL! (unexpected parser success)"
+               else putStrLn "FAIL!"
+
+             putStrLn ""
+             putStrLn "----------------------------------------------------------------------------"
+             putStrLn' (BS.unpack label)
+             putStrLn ""
+             putStrLn' ("ref = " ++ show testEvDat)
+             putStrLn' ("iut = " ++ show evs'')
+             putStrLn ""
+             BS.L.putStr inYamlDat
+             putStrLn ""
+             testParse inYamlDat
+             putStrLn ""
+             -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
+             putStrLn ""
+             putStrLn "----------------------------------------------------------------------------"
+             putStrLn ""
+             pure False
+
+  putStrLn ""
+
+  let ok = length (filter id results)
+      nok = length (filter not results)
+
+  putStrLn ("done (passed: " ++ show ok ++ " / failed: " ++ show nok ++ ")")
+
+putStrLn' msg = putStrLn ("  " ++ msg)
+
 
 ev2str :: Event -> String
 ev2str StreamStart           = "+STR"
@@ -145,4 +177,7 @@ quote2 = concatMap go . T.unpack
 
 
 testParse :: BS.L.ByteString -> IO ()
-testParse bs0 = mapM_  print $ YI.yaml "" bs0 False
+testParse bs0 = mapM_  (putStrLn' . showT) $ YI.yaml "" bs0 False
+  where
+    showT :: YI.Token -> String
+    showT t = replicate (YI.tLineChar t) ' ' ++ show (YI.tText t) ++ "  " ++ show (YI.tCode t)

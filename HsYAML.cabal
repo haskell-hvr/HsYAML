@@ -49,6 +49,7 @@ library
 executable yaml-test
   hs-source-dirs: src-test
   main-is: Main.hs
+  other-modules: TML
 
   default-language:    Haskell2010
 
