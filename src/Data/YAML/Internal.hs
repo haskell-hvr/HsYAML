@@ -50,7 +50,6 @@ import qualified Data.DList                 as D
 import qualified Data.Map                   as Map
 import           Prelude                    hiding ((*), (+), (-), (/), (^))
 import qualified Prelude
-import           Text.Regex
 
 -- * Generic operators
 --
@@ -1328,13 +1327,11 @@ yaml = patternTokenizer l_yaml_stream
 
 -- | @pName name@ converts a parser name to the \"proper\" spec name.
 pName :: String -> String
-pName name = regexSub questionRegex "?"
-           $ regexSub minusRegex "-"
-           $ regexSub plusRegex "+" name
-           where regexSub regex value text = subRegex regex text value
-                 questionRegex = mkRegex "'"
-                 minusRegex = mkRegex "_"
-                 plusRegex = mkRegex "__"
+pName []           = []
+pName ('_':'_':cs) = '+':pName cs
+pName ('_':cs)     = '-':pName cs
+pName ('\'':cs)    = '?':pName cs
+
 
 -- | @tokenizers@ returns a mapping from a production name to a production
 -- tokenizer.
