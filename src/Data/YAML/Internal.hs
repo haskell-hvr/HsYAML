@@ -1,6 +1,3 @@
--- This module is derived from http://hackage.haskell.org/package/YamlReference
--- originally written by Oren Ben-Kiki
-
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -16,11 +13,18 @@
 
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-} -- FIXME
 
--- | Implementation of the YAML syntax as defined in <http://www.yaml.org>.
+-- |
+-- Copyright: © Oren Ben-Kiki 2007,
+--            © Herbert Valerio Riedel 2015-2018
+-- SPDX-License-Identifier: GPL-3.0
+--
+-- Implementation of the YAML 1.2 syntax as defined in <http://yaml.org/spec/1.2/spec.html>.
 -- Actually this file contains the parsing framework and includes
 -- the actual BNF productions.
 --
 -- The parsing framework is fully streaming (generates output tokens \"immediately\").
+--
+-- __NOTE__: This is an internal API for which the PVP versioning contract doesn't apply!
 module Data.YAML.Internal
   ( -- Basic parsing:
     Code(..)

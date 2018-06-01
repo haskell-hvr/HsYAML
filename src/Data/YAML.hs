@@ -7,6 +7,12 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE Trustworthy                #-}
 
+-- |
+-- Copyright: © Herbert Valerio Riedel 2015-2018
+-- SPDX-License-Identifier: GPL-3.0
+--
+-- Document oriented YAML parsing API
+--
 module Data.YAML
     ( decodeLoader, Loader(..), NodeId
     , decodeNode, decodeNode', Doc(..), Node(..)

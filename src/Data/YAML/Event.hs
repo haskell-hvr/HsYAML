@@ -1,5 +1,10 @@
 {-# LANGUAGE Safe #-}
 
+-- |
+-- Copyright: © Herbert Valerio Riedel 2015-2018
+-- SPDX-License-Identifier: GPL-3.0
+--
+-- Event-stream oriented YAML parsing API
 module Data.YAML.Event
     ( Event(..)
     , Style(..)

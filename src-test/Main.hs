@@ -1,3 +1,7 @@
+-- |
+-- Copyright: © Herbert Valerio Riedel 2018
+-- SPDX-License-Identifier: GPL-3.0
+--
 module Main where
 
 import           Control.Monad
