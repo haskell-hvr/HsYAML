@@ -18,6 +18,11 @@ source-repository head
   type: git
   location: https://github.com/hvr/HsYAML.git
 
+flag exe
+  description: Enable @exe:yaml-test@ component
+  manual: True
+  default: False
+
 library
   hs-source-dirs:      src
   exposed-modules:     Data.YAML
@@ -52,13 +57,16 @@ executable yaml-test
 
   default-language:    Haskell2010
 
-  build-depends: HsYAML
-                 -- inherited constraints
-               , bytestring
-               , base
-               , text
-                 -- non-inherited
-               , filepath  == 1.4.*
-               , directory >= 1.2 && < 1.4
+  if flag(exe)
+    build-depends: HsYAML
+                   -- inherited constraints
+                 , bytestring
+                 , base
+                 , text
+                   -- non-inherited
+                 , filepath    == 1.4.*
+                 , directory   >= 1.2 && < 1.4
+  else
+    buildable: False
 
   ghc-options: -rtsopts
