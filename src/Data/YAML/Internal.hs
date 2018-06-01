@@ -6,6 +6,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE PostfixOperators       #-}
+{-# LANGUAGE Safe                   #-}
 {-# LANGUAGE TypeSynonymInstances   #-}
 
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}

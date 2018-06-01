@@ -5,6 +5,7 @@
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE RecursiveDo                #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE Trustworthy                #-}
 
 module Data.YAML
     ( decodeLoader, Loader(..), NodeId

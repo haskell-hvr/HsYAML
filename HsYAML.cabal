@@ -38,7 +38,9 @@ library
                        PostfixOperators
                        RecordWildCards
                        RecursiveDo
+                       Safe
                        ScopedTypeVariables
+                       Trustworthy
                        TypeSynonymInstances
 
   build-depends:       base         >=4.8  && <4.12

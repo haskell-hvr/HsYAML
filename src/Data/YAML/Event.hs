@@ -1,3 +1,5 @@
+{-# LANGUAGE Safe #-}
+
 module Data.YAML.Event
     ( Event(..)
     , Style(..)
