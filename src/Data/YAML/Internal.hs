@@ -8,8 +8,6 @@
 
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# OPTIONS_GHC -fno-warn-unused-binds #-}
-{-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-} -- FIXME
 
@@ -32,19 +30,6 @@ module Data.YAML.Internal
   , Tokenizer
   , yaml
 
-{-
-    -- For testing:
-  , Context
-  , Chomp
-  , tokenizer
-  , tokenizerWithN
-  , tokenizerWithC
-  , tokenizerWithT
-  , tokenizerWithNC
-  , tokenizerWithNT
-  , tokenizerNames
-  , showTokens
--}
   ) where
 
 import           Control.Applicative        (Applicative (..))
@@ -215,8 +200,8 @@ combinePairs (head@(_, head_char):tail)
 -- /rest/ of the input chars, assumed to be a /trail/ surrogate, and continues
 -- combining surrogate pairs.
 combineLead :: (Int, Char) -> [(Int, Char)] -> [(Int, Char)]
-combineLead lead []                                  = error "UTF-16 contains lead surrogate as final character"
-combineLead lead@(_, lead_char) ((trail_offset, trail_char):rest)
+combineLead _lead []                                 = error "UTF-16 contains lead surrogate as final character"
+combineLead (_, lead_char) ((trail_offset, trail_char):rest)
   | '\xDC00' <= trail_char && trail_char <= '\xDFFF' = (trail_offset, combineSurrogates lead_char trail_char):combinePairs rest
   | otherwise                                        = error "UTF-16 contains lead surrogate without trail surrogate"
 
@@ -448,41 +433,6 @@ data Token = Token {
     tText       :: String -- ^ Contained input chars, if any.
   } deriving Show
 
-{-
--- | @show token@ converts a 'Token' to two YEAST lines: a comment with the
--- position numbers and the actual token line.
-instance Show Token where
-  show token = "# B: " ++ (show $ token|>tByteOffset)
-            ++ ", C: " ++ (show $ token|>tCharOffset)
-            ++ ", L: " ++ (show $ token|>tLine)
-            ++ ", c: " ++ (show $ token|>tLineChar) ++ "\n"
-            ++ (show $ token|>tCode) ++ (escapeString $ token|>tText) ++ "\n"
--}
-
--- | @escapeString string@ escapes all the non-ASCII characters in the
--- /string/, as well as escaping the \"@\\@\" character, using the \"@\\xXX@\",
--- \"@\\uXXXX@\" and \"@\\UXXXXXXXX@\" escape sequences.
-escapeString :: String -> String
-escapeString []                                   = []
-escapeString (first:rest)
-  | ' ' <= first && first /= '\\' && first <= '~' = first:(escapeString rest)
-  | first <= '\xFF'                               = "\\x" ++ (toHex 2 $ ord first) ++ (escapeString rest)
-  | '\xFF' < first && first <= '\xFFFF'           = "\\u" ++ (toHex 4 $ ord first) ++ (escapeString rest)
-  | otherwise                                     = "\\U" ++ (toHex 8 $ ord first) ++ (escapeString rest)
-
--- | @toHex digits int@ converts the /int/ to the specified number of
--- hexadecimal /digits/.
-toHex :: Int -> Int -> String
-toHex digits int
-  | digits > 1  = (toHex (digits .- 1) (int `div` 16)) ++ [intToDigit $ int `mod` 16]
-  | digits == 1 = [intToDigit int]
-
-{-
--- | @showTokens tokens@ converts a list of /tokens/ to a multi-line YEAST
--- text.
-showTokens :: [Token] -> String
-showTokens tokens = foldr (\ token text -> (show token) ++ text) "" tokens
--}
 
 -- * Parsing framework
 --
@@ -616,10 +566,6 @@ initialState name input = let (encoding, decoded) = decode input
 --
 -- We need four setter functions to pass them around as arguments. For some
 -- reason, Haskell only generates getter functions.
-
--- | @setDecision name state@ sets the @sDecision@ field to /decision/.
-setDecision :: String -> State -> State
-setDecision decision state = state { sDecision = decision }
 
 -- | @setLimit limit state@ sets the @sLimit@ field to /limit/.
 setLimit :: Int -> State -> State
@@ -760,7 +706,6 @@ infix  0 *
 infix  0 +
 infix  0 <?
 infix  0 >?
-infix  0 <!
 infix  0 >!
 
 -- | @parser % n@ repeats /parser/ exactly /n/ times.
@@ -801,12 +746,6 @@ parser ?! decision = peek parser & commit decision
 -- if it matches the lookahead parser (positive lookahead)
 (>?) :: (Match match result) => match -> Parser result
 (>?) lookahead = peek lookahead
-
--- | @lookbehind <?@ matches the current point without consuming any
--- characters, if the previous character does not match the lookbehind parser
--- (single character negative lookbehind)
-(<!) :: (Match match result) => match -> Pattern
-(<!) lookbehind = prev $ reject lookbehind Nothing
 
 -- | @lookahead >?@ matches the current point without consuming any characters
 -- if it matches the lookahead parser (negative lookahead)
@@ -935,11 +874,11 @@ reject parser name = Parser $ \ state ->
   where rejectParser point name (Parser parser) state =
           let reply = parser state
           in case reply|>rResult of
-                  Failed message -> returnReply point ()
-                  Result value   -> case name of
+                  Failed _message -> returnReply point ()
+                  Result _value   -> case name of
                                          Nothing   -> unexpectedReply point
                                          Just text -> failReply point $ "Unexpected " ++ text
-                  More parser'   -> rejectParser point name parser' $ reply|>rState
+                  More parser'    -> rejectParser point name parser' $ reply|>rState
 
 -- | @upto parser@ consumes all the character up to and not including the next
 -- point where the specified parser is a match.
@@ -957,11 +896,11 @@ nonEmpty parser = Parser $ \ state ->
           let reply = parser state
               state' = reply|>rState
           in case reply|>rResult of
-                  Failed message -> reply
-                  Result value   -> if state'|>sCharOffset > offset
+                  Failed _message -> reply
+                  Result _value   -> if state'|>sCharOffset > offset
                                        then reply
                                        else failReply state' "Matched empty pattern"
-                  More parser'   -> reply { rResult = More $ nonEmptyParser offset parser' }
+                  More parser'    -> reply { rResult = More $ nonEmptyParser offset parser' }
 
 -- | @empty@ always matches without consuming any input.
 empty :: Pattern
@@ -1042,9 +981,9 @@ nextIf test = Parser $ \ state ->
                               Result _ -> limitedNextIf state
   where limitedNextIf state =
           case state|>sLimit of
-               -1    -> consumeNextIf state
-               0     -> failReply state "Lookahead limit reached"
-               limit -> consumeNextIf state { sLimit = state|>sLimit .- 1 }
+               -1     -> consumeNextIf state
+               0      -> failReply state "Lookahead limit reached"
+               _limit -> consumeNextIf state { sLimit = state|>sLimit .- 1 }
         consumeNextIf state =
           case state|>sInput of
                ((offset, char):rest) | test char -> let chars = if state|>sIsPeek
@@ -1107,15 +1046,6 @@ wrap parser = do result <- match parser
                  finishToken
                  eof
                  return result
-
--- | @consume parser@ invokes the /parser/ and then consumes all remaining
--- unparsed input characters.
-consume :: (Match match result) => match -> Parser result
-consume parser = do result <- match parser
-                    finishToken
-                    clearInput
-                    return result
-                 where clearInput = Parser $ \ state -> returnReply state { sInput = [] } ()
 
 -- | @token code parser@ places all text matched by /parser/ into a 'Token' with
 -- the specified /code/ (unless it is empty). Note it collects the text even if
@@ -1268,27 +1198,6 @@ patternTokenizer pattern name input withFollowing =
                   Result _       -> tokens
                   More parser'   -> D.append tokens $ patternParser parser' state'
 
--- | @parserTokenizer what parser@ converts the /parser/ returning /what/ to a
--- simple 'Tokenizer' (only used for tests). The result is reported as a token
--- with the @Detected@ 'Code' The result is reported as a token with the
--- @Detected@ 'Code'.
-parserTokenizer :: (Show result, Match match result) => String -> match -> Tokenizer
-parserTokenizer what parser name input withFollowing =
-  D.toList $ parserParser (wrap parser) (initialState name input)
-  where parserParser (Parser parser) state =
-          let reply = parser state
-              tokens = commitBugs reply
-              state' = reply|>rState
-          in case reply|>rResult of
-                  Failed message -> errorTokens tokens state' message withFollowing
-                  Result value   -> D.append tokens $ D.singleton Token { tByteOffset = state'|>sByteOffset,
-                                                                          tCharOffset = state'|>sCharOffset,
-                                                                          tLine       = state'|>sLine,
-                                                                          tLineChar   = state'|>sLineChar,
-                                                                          tCode       = Detected,
-                                                                          tText       = what ++ "=" ++ (show value) }
-                  More parser'   -> D.append tokens $ parserParser parser' $ state'
-
 -- | @errorTokens tokens state message withFollowing@ appends an @Error@ token
 -- with the specified /message/ at the end of /tokens/, and if /withFollowing/
 -- also appends the unparsed text following the error as a final @Unparsed@
@@ -1329,326 +1238,6 @@ commitBugs reply =
 -- messages) to a list of 'Token' according to the YAML spec. This is it!
 yaml :: Tokenizer
 yaml = patternTokenizer l_yaml_stream
-
--- | @pName name@ converts a parser name to the \"proper\" spec name.
-pName :: String -> String
-pName []           = []
-pName ('_':'_':cs) = '+':pName cs
-pName ('_':cs)     = '-':pName cs
-pName ('\'':cs)    = '?':pName cs
-
-
--- | @tokenizers@ returns a mapping from a production name to a production
--- tokenizer.
-tokenizers :: Map.Map String Tokenizer
-tokenizers = par "c_chomping_indicator"  c_chomping_indicator "t"
-           $ pac "detect_inline_indentation"  detect_inline_indentation "m"
-           $ pat "b_as_line_feed" b_as_line_feed
-           $ pat "b_as_space" b_as_space
-           $ pat "b_carriage_return" b_carriage_return
-           $ pat "b_break" b_break
-           $ pat "b_char" b_char
-           $ pat "b_line_feed" b_line_feed
-           $ pat "b_non_content" b_non_content
-           $ pat "b_comment" b_comment
-           $ pat "c_alias" c_alias
-           $ pat "c_anchor" c_anchor
-           $ pat "c_byte_order_mark" c_byte_order_mark
-           $ pat "c_collect_entry" c_collect_entry
-           $ pat "c_comment" c_comment
-           $ pat "c_directive" c_directive
-           $ pat "c_directives_end" c_directives_end
-           $ pat "c_document_end" c_document_end
-           $ pat "c_double_quote" c_double_quote
-           $ pat "c_escape" c_escape
-           $ pat "c_flow_indicator" c_flow_indicator
-           $ pat "c_folded" c_folded
-           $ pat "c_forbidden" c_forbidden
-           $ pat "c_indicator" c_indicator
-           $ pat "c_literal" c_literal
-           $ pat "c_mapping_end" c_mapping_end
-           $ pat "c_mapping_key" c_mapping_key
-           $ pat "c_mapping_start" c_mapping_start
-           $ pat "c_mapping_value" c_mapping_value
-           $ pat "c_named_tag_handle" c_named_tag_handle
-           $ pat "c_nb_comment_text" c_nb_comment_text
-           $ pat "c_non_specific_tag" c_non_specific_tag
-           $ pat "c_ns_alias_node" c_ns_alias_node
-           $ pat "c_ns_anchor_property" c_ns_anchor_property
-           $ pat "c_ns_esc_char" c_ns_esc_char
-           $ pat "c_ns_local_tag_prefix" c_ns_local_tag_prefix
-           $ pat "c_ns_shorthand_tag" c_ns_shorthand_tag
-           $ pat "c_ns_tag_property" c_ns_tag_property
-           $ pat "c_primary_tag_handle" c_primary_tag_handle
-           $ pat "c_printable" c_printable
-           $ pat "c_quoted_quote" c_quoted_quote
-           $ pat "c_reserved" c_reserved
-           $ pat "c_secondary_tag_handle" c_secondary_tag_handle
-           $ pat "c_sequence_end" c_sequence_end
-           $ pat "c_sequence_entry" c_sequence_entry
-           $ pat "c_sequence_start" c_sequence_start
-           $ pat "c_single_quote" c_single_quote
-           $ pat "c_tag" c_tag
-           $ pat "c_tag_handle" c_tag_handle
-           $ pat "c_verbatim_tag" c_verbatim_tag
-           $ pat "e_node" e_node
-           $ pat "e_scalar" e_scalar
-           $ pat "l_any_document" l_any_document
-           $ pat "l_bare_document" l_bare_document
-           $ pat "l_comment" l_comment
-           $ pat "l_directive" l_directive
-           $ pat "l_directives_document" l_directives_document
-           $ pat "l_document_prefix" l_document_prefix
-           $ pat "l_document_suffix" l_document_suffix
-           $ pat "l_explicit_document" l_explicit_document
-           $ pat "l_yaml_stream" l_yaml_stream
-           $ pat "nb_char" nb_char
-           $ pat "nb_double_char" nb_double_char
-           $ pat "nb_double_one_line" nb_double_one_line
-           $ pat "nb_json" nb_json
-           $ pat "nb_ns_double_in_line" nb_ns_double_in_line
-           $ pat "nb_ns_single_in_line" nb_ns_single_in_line
-           $ pat "nb_single_char" nb_single_char
-           $ pat "nb_single_one_line" nb_single_one_line
-           $ pat "ns_anchor_char" ns_anchor_char
-           $ pat "ns_anchor_name" ns_anchor_name
-           $ pat "ns_ascii_letter" ns_ascii_letter
-           $ pat "ns_char" ns_char
-           $ pat "ns_dec_digit" ns_dec_digit
-           $ pat "ns_directive_name" ns_directive_name
-           $ pat "ns_directive_parameter" ns_directive_parameter
-           $ pat "ns_double_char" ns_double_char
-           $ pat "ns_esc_16_bit" ns_esc_16_bit
-           $ pat "ns_esc_32_bit" ns_esc_32_bit
-           $ pat "ns_esc_8_bit" ns_esc_8_bit
-           $ pat "ns_esc_backslash" ns_esc_backslash
-           $ pat "ns_esc_backspace" ns_esc_backspace
-           $ pat "ns_esc_bell" ns_esc_bell
-           $ pat "ns_esc_carriage_return" ns_esc_carriage_return
-           $ pat "ns_esc_double_quote" ns_esc_double_quote
-           $ pat "ns_esc_escape" ns_esc_escape
-           $ pat "ns_esc_form_feed" ns_esc_form_feed
-           $ pat "ns_esc_horizontal_tab" ns_esc_horizontal_tab
-           $ pat "ns_esc_line_feed" ns_esc_line_feed
-           $ pat "ns_esc_line_separator" ns_esc_line_separator
-           $ pat "ns_esc_next_line" ns_esc_next_line
-           $ pat "ns_esc_non_breaking_space" ns_esc_non_breaking_space
-           $ pat "ns_esc_null" ns_esc_null
-           $ pat "ns_esc_paragraph_separator" ns_esc_paragraph_separator
-           $ pat "ns_esc_slash" ns_esc_slash
-           $ pat "ns_esc_space" ns_esc_space
-           $ pat "ns_esc_vertical_tab" ns_esc_vertical_tab
-           $ pat "ns_global_tag_prefix" ns_global_tag_prefix
-           $ pat "ns_hex_digit" ns_hex_digit
-           $ pat "ns_plain_safe_in" ns_plain_safe_in
-           $ pat "ns_plain_safe_out" ns_plain_safe_out
-           $ pat "ns_reserved_directive" ns_reserved_directive
-           $ pat "ns_s_block_map_implicit_key" ns_s_block_map_implicit_key
-           $ pat "ns_single_char" ns_single_char
-           $ pat "ns_tag_char" ns_tag_char
-           $ pat "ns_tag_directive" ns_tag_directive
-           $ pat "ns_tag_prefix" ns_tag_prefix
-           $ pat "ns_uri_char" ns_uri_char
-           $ pat "ns_word_char" ns_word_char
-           $ pat "ns_yaml_directive" ns_yaml_directive
-           $ pat "ns_yaml_version" ns_yaml_version
-           $ pat "s_b_comment" s_b_comment
-           $ pat "s_l_comments" s_l_comments
-           $ pat "s_separate_in_line" s_separate_in_line
-           $ pat "s_space" s_space
-           $ pat "s_tab" s_tab
-           $ pat "s_white" s_white
-           $ Map.empty
-  where pat name pattern     = Map.insert (pName name) $ patternTokenizer     (match pattern)
-        par name parser what = Map.insert (pName name) $ parserTokenizer what (match parser)
-        pac name parser what = Map.insert (pName name) $ parserTokenizer what (consume parser)
-
--- | @tokenizer name@ converts the production with the specified /name/ to a
--- simple 'Tokenizer', or @Nothing@ if it isn't known.
-tokenizer :: String -> (Maybe Tokenizer)
-tokenizer name = Map.lookup name tokenizers
-
--- | @tokenizersWithN@ returns a mapping from a production name to a production
--- tokenizer (that takes an /n/ argument).
-tokenizersWithN :: Map.Map String (Int -> Tokenizer)
-tokenizersWithN = par "c_b_block_header"  c_b_block_header "(m,t)"
-                $ pac "detect_collection_indentation"  detect_collection_indentation "m"
-                $ pac "detect_scalar_indentation"  detect_scalar_indentation "m"
-                $ par "c_indentation_indicator"  c_indentation_indicator "m"
-                $ par "count_spaces"  count_spaces "m"
-                $ pat "b_l_spaced" b_l_spaced
-                $ pat "b_nb_literal_next" b_nb_literal_next
-                $ pat "c_l_block_map_explicit_entry" c_l_block_map_explicit_entry
-                $ pat "c_l_block_map_explicit_key" c_l_block_map_explicit_key
-                $ pat "c_l_block_map_implicit_value" c_l_block_map_implicit_value
-                $ pat "c_l_block_seq_entry" c_l_block_seq_entry
-                $ pat "c_l__folded" c_l__folded
-                $ pat "c_l__literal" c_l__literal
-                $ pat "l_block_map_explicit_value" l_block_map_explicit_value
-                $ pat "l__block_mapping" l__block_mapping
-                $ pat "l__block_sequence" l__block_sequence
-                $ pat "l_keep_empty" l_keep_empty
-                $ pat "l_nb_diff_lines" l_nb_diff_lines
-                $ pat "l_nb_folded_lines" l_nb_folded_lines
-                $ pat "l_nb_literal_text" l_nb_literal_text
-                $ pat "l_nb_same_lines" l_nb_same_lines
-                $ pat "l_nb_spaced_lines" l_nb_spaced_lines
-                $ pat "l_strip_empty" l_strip_empty
-                $ pat "l_trail_comments" l_trail_comments
-                $ pat "nb_double_multi_line" nb_double_multi_line
-                $ pat "nb_single_multi_line" nb_single_multi_line
-                $ pat "ns_l_block_map_entry" ns_l_block_map_entry
-                $ pat "ns_l_block_map_implicit_entry" ns_l_block_map_implicit_entry
-                $ pat "ns_l_in_line_mapping" ns_l_in_line_mapping
-                $ pat "ns_l_in_line_sequence" ns_l_in_line_sequence
-                $ pat "s_block_line_prefix" s_block_line_prefix
-                $ pat "s_double_break" s_double_break
-                $ pat "s_double_escaped" s_double_escaped
-                $ pat "s_double_next_line" s_double_next_line
-                $ pat "s_flow_folded" s_flow_folded
-                $ pat "s_flow_line_prefix" s_flow_line_prefix
-                $ pat "s_indent" s_indent
-                $ pat "s_indent_le" s_indent_le
-                $ pat "s_indent_lt" s_indent_lt
-                $ pat "s_l__flow_in_block" s_l__flow_in_block
-                $ pat "s_nb_folded_text" s_nb_folded_text
-                $ pat "s_nb_spaced_text" s_nb_spaced_text
-                $ pat "s_separate_lines" s_separate_lines
-                $ pat "s_single_next_line" s_single_next_line
-                $ Map.empty
-  where pat name pattern     = Map.insert (pName name) (\ n -> patternTokenizer     (match   $ pattern n))
-        par name parser what = Map.insert (pName name) (\ n -> parserTokenizer what (match   $ parser  n))
-        pac name parser what = Map.insert (pName name) (\ n -> parserTokenizer what (consume $ parser  n))
-
--- | @tokenizerWithN name n@ converts the production (that requires an /n/
--- argument) with the specified /name/ to a simple 'Tokenizer', or @Nothing@ if
--- it isn't known.
-tokenizerWithN :: String -> Int -> Maybe Tokenizer
-tokenizerWithN name n =
-  case Map.lookup name tokenizersWithN of
-    Just tokenizer -> Just $ tokenizer n
-    Nothing        -> Nothing
-
--- | @tokenizersWithC@ returns a mapping from a production name to a production
--- tokenizer (that takes a /c/ argument).
-tokenizersWithC :: Map.Map String (Context -> Tokenizer)
-tokenizersWithC = pat "c_s_implicit_json_key" c_s_implicit_json_key
-                $ pat "nb_ns_plain_in_line" nb_ns_plain_in_line
-                $ pat "ns_plain_char" ns_plain_char
-                $ pat "ns_plain_first" ns_plain_first
-                $ pat "ns_plain_one_line" ns_plain_one_line
-                $ pat "ns_plain_safe" ns_plain_safe
-                $ pat "ns_s_implicit_yaml_key" ns_s_implicit_yaml_key
-                $ Map.empty
-  where pat name pattern = Map.insert (pName name) (\ c -> patternTokenizer (match $ pattern c))
-
--- | @tokenizerWithC name c@ converts the production (that requires a /c/
--- argument) with the specified /name/ to a simple 'Tokenizer', or @Nothing@ if
--- it isn't known.
-tokenizerWithC :: String -> Context -> Maybe Tokenizer
-tokenizerWithC name c =
-  case Map.lookup name tokenizersWithC of
-    Just tokenizer -> Just $ tokenizer c
-    Nothing        -> Nothing
-
--- | @tokenizersWithT@ returns a mapping from a production name to a production
--- tokenizer (that takes a /t/ argument).
-tokenizersWithT :: Map.Map String (Chomp -> Tokenizer)
-tokenizersWithT = pat "b_chomped_last" b_chomped_last
-                $ Map.empty
-  where pat name pattern = Map.insert (pName name) (\ t -> patternTokenizer (match $ pattern t))
-
--- | @tokenizerWithT name t@ converts the production (that requires an /t/
--- argument) with the specified /name/ to a simple 'Tokenizer', or @Nothing@ if
--- it isn't known.
-tokenizerWithT :: String -> Chomp -> Maybe Tokenizer
-tokenizerWithT name t =
-  case Map.lookup name tokenizersWithT of
-    Just tokenizer -> Just $ tokenizer t
-    Nothing        -> Nothing
-
--- | @tokenizersWithNC@ returns a mapping from a production name to a
--- production tokenizer (that requires /n/ and /c/ arguments).
-tokenizersWithNC :: Map.Map String (Int -> Context -> Tokenizer)
-tokenizersWithNC = pat "b_l_folded" b_l_folded
-                 $ pat "b_l_trimmed" b_l_trimmed
-                 $ pat "c_double_quoted" c_double_quoted
-                 $ pat "c_flow_json_content" c_flow_json_content
-                 $ pat "c_flow_json_node" c_flow_json_node
-                 $ pat "c_flow_mapping" c_flow_mapping
-                 $ pat "c_flow_sequence" c_flow_sequence
-                 $ pat "c_ns_flow_map_adjacent_value" c_ns_flow_map_adjacent_value
-                 $ pat "c_ns_flow_map_empty_key_entry" c_ns_flow_map_empty_key_entry
-                 $ pat "c_ns_flow_map_json_key_entry" c_ns_flow_map_json_key_entry
-                 $ pat "c_ns_flow_map_separate_value" c_ns_flow_map_separate_value
-                 $ pat "c_ns_flow_pair_json_key_entry" c_ns_flow_pair_json_key_entry
-                 $ pat "c_ns_properties" c_ns_properties
-                 $ pat "c_single_quoted" c_single_quoted
-                 $ pat "l_empty" l_empty
-                 $ pat "nb_double_text" nb_double_text
-                 $ pat "nb_single_text" nb_single_text
-                 $ pat "ns_flow_content" ns_flow_content
-                 $ pat "ns_flow_map_entry" ns_flow_map_entry
-                 $ pat "ns_flow_map_explicit_entry" ns_flow_map_explicit_entry
-                 $ pat "ns_flow_map_implicit_entry" ns_flow_map_implicit_entry
-                 $ pat "ns_flow_map_yaml_key_entry" ns_flow_map_yaml_key_entry
-                 $ pat "ns_flow_node" ns_flow_node
-                 $ pat "ns_flow_pair" ns_flow_pair
-                 $ pat "ns_flow_pair_entry" ns_flow_pair_entry
-                 $ pat "ns_flow_pair_yaml_key_entry" ns_flow_pair_yaml_key_entry
-                 $ pat "ns_flow_seq_entry" ns_flow_seq_entry
-                 $ pat "ns_flow_yaml_content" ns_flow_yaml_content
-                 $ pat "ns_flow_yaml_node" ns_flow_yaml_node
-                 $ pat "ns_plain" ns_plain
-                 $ pat "ns_plain_multi_line" ns_plain_multi_line
-                 $ pat "ns_s_flow_map_entries" ns_s_flow_map_entries
-                 $ pat "ns_s_flow_seq_entries" ns_s_flow_seq_entries
-                 $ pat "s_l__block_collection" s_l__block_collection
-                 $ pat "s_l__block_in_block" s_l__block_in_block
-                 $ pat "s_l__block_indented" s_l__block_indented
-                 $ pat "s_l__block_node" s_l__block_node
-                 $ pat "s_l__block_scalar" s_l__block_scalar
-                 $ pat "s_line_prefix" s_line_prefix
-                 $ pat "s_ns_plain_next_line" s_ns_plain_next_line
-                 $ pat "s_separate" s_separate
-                 $ Map.empty
-  where pat name pattern = Map.insert (pName name) (\ n c -> patternTokenizer (match $ pattern n c))
-
--- | @tokenizerWithNC name n c@ converts the production (that requires /n/ and
--- /c/ arguments) with the specified /name/ to a simple 'Tokenizer', or
--- @Nothing@ if it isn't known.
-tokenizerWithNC :: String -> Int -> Context -> Maybe Tokenizer
-tokenizerWithNC name n c =
-  case Map.lookup name tokenizersWithNC of
-    Just tokenizer -> Just $ tokenizer n c
-    Nothing        -> Nothing
-
--- | @tokenizersWithNT@ returns a mapping from a production name to a
--- production tokenizer (that requires /n/ and /t/ arguments).
-tokenizersWithNT :: Map.Map String (Int -> Chomp -> Tokenizer)
-tokenizersWithNT = pat "l_chomped_empty" l_chomped_empty
-                 $ pat "l_folded_content" l_folded_content
-                 $ pat "l_literal_content" l_literal_content
-                 $ Map.empty
-  where pat name pattern = Map.insert (pName name) (\ n t -> patternTokenizer (match $ pattern n t))
-
--- | @tokenizerWithNT name n t@ converts the production (that requires /n/ and
--- /t/ arguments) with the specified /name/ to a simple 'Tokenizer', or
--- @Nothing@ if it isn't known.
-tokenizerWithNT :: String -> Int -> Chomp -> Maybe Tokenizer
-tokenizerWithNT name n t =
-  case Map.lookup name tokenizersWithNT of
-    Just tokenizer -> Just $ tokenizer n t
-    Nothing        -> Nothing
-
--- | @tokenizerNames@ returns the list of all productions (tokenizers).
-tokenizerNames :: [String]
-tokenizerNames = (Map.keys tokenizers)
-              ++ (Map.keys tokenizersWithN)
-              ++ (Map.keys tokenizersWithC)
-              ++ (Map.keys tokenizersWithT)
-              ++ (Map.keys tokenizersWithNC)
-              ++ (Map.keys tokenizersWithNT)
 
 -- * Productions
 
@@ -2027,7 +1616,7 @@ nb_single_multi_line n  {- 125 -} = nb_ns_single_in_line
 
 -- 7.3.3 Plain Style
 
-ns_plain_first c  {- 126 -} = ns_char - c_indicator
+ns_plain_first _c  {- 126 -} = ns_char - c_indicator
                             / ( ':' / '?' / '-' ) & ( ns_char >?)
 
 ns_plain_safe c   {- 127 -} = case c of
