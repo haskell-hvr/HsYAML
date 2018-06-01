@@ -43,7 +43,7 @@ module Data.YAML.Internal
 -}
   ) where
 
--- import           Control.Applicative        (Applicative (..))
+import           Control.Applicative        (Applicative (..))
 import           Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Char

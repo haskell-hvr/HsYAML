@@ -9,10 +9,12 @@ module Data.YAML.Event
     , EvStream
     ) where
 
+import           Control.Applicative  (Applicative (..))
 import qualified Data.ByteString.Lazy as BS.L
 import           Data.Char
 import           Data.Map             (Map)
 import qualified Data.Map             as Map
+import           Data.Monoid          (Monoid (mappend, mempty))
 import           Data.Text            (Text)
 import qualified Data.Text            as T
 import qualified Data.YAML.Internal   as Y

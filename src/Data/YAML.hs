@@ -12,20 +12,21 @@ module Data.YAML
     , decodeNode, decodeNode', Doc(..), Node(..)
     ) where
 
-import qualified Data.ByteString.Lazy  as BS.L
-import           Data.Functor.Identity
-import           Data.Map              (Map)
-import qualified Data.Map              as Map
-import           Data.Set              (Set)
-import qualified Data.Set              as Set
-import           Data.Text             (Text)
-import           Data.YAML.Event       (Tag)
-import qualified Data.YAML.Event       as YE
-
 import           Control.Applicative
 import           Control.Monad.Except
--- import           Control.Monad.Fix
+import           Control.Monad.Identity
 import           Control.Monad.State
+import qualified Data.ByteString.Lazy   as BS.L
+import           Data.Map               (Map)
+import qualified Data.Map               as Map
+import           Data.Monoid            (mempty)
+import           Data.Set               (Set)
+import qualified Data.Set               as Set
+import           Data.Text              (Text)
+import           Data.Word
+
+import           Data.YAML.Event        (Tag)
+import qualified Data.YAML.Event        as YE
 
 #if !MIN_VERSION_mtl(2,2,2)
 liftEither :: MonadError e m => Either e a -> m a
@@ -103,7 +104,7 @@ manyUnless p act = do
   t0 <- peek1
   if p t0
     then anyEv >> return []
-    else liftA2 (:) act (manyUnless p act)
+    else liftM2 (:) act (manyUnless p act)
 
 
 type NodeId = Word
@@ -121,7 +122,7 @@ data Loader m n = Loader
 decodeLoader :: forall n m . MonadFix m => Loader m n -> BS.L.ByteString -> m (Either String [n])
 decodeLoader Loader{..} bs0 = do
     case sequence . YE.parseEvents $ bs0 of
-      Left (_,err) -> pure (Left err)
+      Left (_,err) -> return (Left err)
       Right evs    -> runParserT goStream evs
   where
     goStream :: PT n m [n]
