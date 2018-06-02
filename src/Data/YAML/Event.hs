@@ -1,4 +1,5 @@
-{-# LANGUAGE Safe #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE Safe            #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -6,12 +7,12 @@
 --
 -- Event-stream oriented YAML parsing API
 module Data.YAML.Event
-    ( Event(..)
+    ( parseEvents
+    , EvStream
+    , Event(..)
     , Style(..)
     , Tag
     , Anchor
-    , parseEvents
-    , EvStream
     ) where
 
 import           Control.Applicative  (Applicative (..))
@@ -25,22 +26,24 @@ import qualified Data.Text            as T
 import qualified Data.YAML.Token      as Y
 import           Numeric              (readHex)
 
--- basic libyaml event types
 -- TODO: consider also non-essential attributes
 
-{-
-
-stream   ::= StreamStart document* StreamEnd
-document ::= DocumentStart node DocumentEnd
-node     ::= Alias
-           | Scalar
-           | sequence
-           | mapping
-sequence ::= SequenceStart node* SequenceEnd
-mapping  ::= MappingStart (node node)* MappingEnd
-
--}
-
+-- | YAML Event Types
+--
+-- The events correspond to the ones from [LibYAML](http://pyyaml.org/wiki/LibYAML)
+--
+-- The grammar below defines well-formed streams of 'Event's:
+--
+-- @
+-- stream   ::= 'StreamStart' document* 'StreamEnd'
+-- document ::= 'DocumentStart' node 'DocumentEnd'
+-- node     ::= 'Alias'
+--            | 'Scalar'
+--            | sequence
+--            | mapping
+-- sequence ::= 'SequenceStart' node* 'SequenceEnd'
+-- mapping  ::= 'MappingStart' (node node)* 'MappingEnd'
+-- @
 data Event
     = StreamStart
     | StreamEnd
@@ -54,14 +57,30 @@ data Event
     | MappingEnd
     deriving (Show, Eq)
 
+-- | YAML Anchor identifiers
 type Anchor = Text
 
+-- | YAML Tags
 type Tag = Maybe Text
 
-type Props = (Maybe Text,Tag)
+-- | Event stream produced by 'parseEvents'
+--
+-- A 'Left' value denotes parsing errors. The event stream ends
+-- immediately once a 'Left' value is returned.
+type EvStream = [Either (Pos,String) Event]
 
-type EvStream = [Either (Int,String) Event]
+-- | Position in parsed YAML source
+data Pos = Pos
+    { posByteOffset :: !Int -- ^ 0-based byte offset
+    , posCharOffset :: !Int -- ^ 0-based character (Unicode code-point) offset
+    , posLine       :: !Int -- ^ 1-based line number
+    , posColumn     :: !Int -- ^ 0-based character (Unicode code-point) column number
+    } deriving Show
 
+tok2pos :: Y.Token -> Pos
+tok2pos Y.Token { Y.tByteOffset = posByteOffset, Y.tCharOffset = posCharOffset, Y.tLine = posLine, Y.tLineChar = posColumn } = Pos {..}
+
+-- | 'Scalar' node style
 data Style = Plain
            | SingleQuoted
            | DoubleQuoted
@@ -69,7 +88,9 @@ data Style = Plain
            | Folded
            deriving (Eq,Show)
 
+-- internal
 type TagHandle = Text
+type Props = (Maybe Text,Tag)
 
 tagUnescape :: Text -> Text
 tagUnescape = T.pack . go . T.unpack
@@ -91,6 +112,7 @@ getUriTag toks0 = do
   (hs,Y.Token { Y.tCode = Y.EndTag } : toks2) <- Just $ span (\Y.Token { Y.tCode = c } -> c `elem` [Y.Indicator,Y.Meta]) toks1
   pure (T.pack $ concatMap Y.tText hs, toks2)
 
+-- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
 parseEvents :: BS.L.ByteString -> EvStream
 parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) (Y.tokenize bs0 False))
   where
@@ -141,10 +163,9 @@ parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (
     go0 _ xs = err xs
 
 err :: Tok2EvStream
-err (Y.Token { Y.tCode = Y.Error, Y.tByteOffset = ofs, Y.tText = msg } : _) = [Left (ofs, msg)]
-err (Y.Token { Y.tByteOffset = ofs } : _) = [Left (ofs, "")]
-err [] = [Left (-1,"Unexpected end of token stream")]
-
+err (tok@Y.Token { Y.tCode = Y.Error, Y.tText = msg } : _) = [Left (tok2pos tok, msg)]
+err (tok : _) = [Left (tok2pos tok, "Internal error")]
+err [] = [Left ((Pos (-1) (-1) (-1) (-1)), "Unexpected end of token stream")]
 
 goNode0 :: Map TagHandle Text -> Tok2EvStreamCont
 goNode0 tagmap = goNode
