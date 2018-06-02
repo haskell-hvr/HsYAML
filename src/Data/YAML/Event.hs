@@ -22,7 +22,7 @@ import qualified Data.Map             as Map
 import           Data.Monoid          (Monoid (mappend, mempty))
 import           Data.Text            (Text)
 import qualified Data.Text            as T
-import qualified Data.YAML.Internal   as Y
+import qualified Data.YAML.Token      as Y
 import           Numeric              (readHex)
 
 -- basic libyaml event types
@@ -92,7 +92,7 @@ getUriTag toks0 = do
   pure (T.pack $ concatMap Y.tText hs, toks2)
 
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) (Y.yaml "" bs0 False))
+parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) (Y.tokenize "" bs0 False))
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)

@@ -26,8 +26,8 @@ flag exe
 library
   hs-source-dirs:      src
   exposed-modules:     Data.YAML
-                     , Data.YAML.Internal
                      , Data.YAML.Event
+                     , Data.YAML.Token
 
   default-language:    Haskell2010
   other-extensions:    FlexibleContexts

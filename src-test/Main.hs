@@ -18,7 +18,7 @@ import qualified Data.Text                  as T
 import qualified Data.Text.Encoding         as T
 import           Data.YAML
 import           Data.YAML.Event            as YE
-import qualified Data.YAML.Internal         as YI
+import qualified Data.YAML.Token            as YI
 
 import           TML
 

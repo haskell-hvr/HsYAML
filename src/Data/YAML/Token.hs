@@ -16,26 +16,18 @@
 --            © Herbert Valerio Riedel 2015-2018
 -- SPDX-License-Identifier: GPL-3.0
 --
--- Implementation of the YAML 1.2 syntax as defined in <http://yaml.org/spec/1.2/spec.html>.
--- Actually this file contains the parsing framework and includes
--- the actual BNF productions.
+-- Tokenizer for the YAML 1.2 syntax as defined in <http://yaml.org/spec/1.2/spec.html>.
 --
--- The parsing framework is fully streaming (generates output tokens \"immediately\").
---
--- __NOTE__: This is an internal API for which the PVP versioning contract doesn't apply!
-module Data.YAML.Internal
-  ( -- Basic parsing:
-    Code(..)
+module Data.YAML.Token
+  ( tokenize
   , Token(..)
-  , Tokenizer
-  , yaml
-
+  , Code(..)
   ) where
 
 import           Control.Applicative        (Applicative (..))
-import           Control.Monad
+import           Control.Monad              (ap, liftM)
 import qualified Data.ByteString.Lazy.Char8 as BLC
-import           Data.Char
+import           Data.Char                  (chr, ord)
 import qualified Data.DList                 as D
 import qualified Data.Map                   as Map
 import           Prelude                    hiding ((*), (+), (-), (/), (^))
@@ -1234,10 +1226,17 @@ commitBugs reply =
                                                                tCode       = Error,
                                                                tText       = "Commit to '" ++ commit ++ "' was made outside it" }
 
--- | @yaml name input@ converts the Unicode /input/ (called /name/ in error
--- messages) to a list of 'Token' according to the YAML spec. This is it!
-yaml :: Tokenizer
-yaml = patternTokenizer l_yaml_stream
+-- | @'tokenize' name input emit_unparsed@
+-- converts the Unicode /input/ (called /name/ in error messages) to a
+-- list of 'Token' according to the YAML 1.2 specification.
+--
+-- Errors are reported as tokens with @'Error' :: 'Code'@, and the
+-- unparsed text following an error may be attached as a final 'Unparsed' token
+-- (if the /emit_unparsed/ argument is @True@). Note that tokens are available
+-- \"immediately\", allowing for streaming of large YAML files with
+-- memory requirements depending only on the YAML nesting level.
+tokenize :: String -> BLC.ByteString -> Bool -> [Token]
+tokenize = patternTokenizer l_yaml_stream
 
 -- * Productions
 
