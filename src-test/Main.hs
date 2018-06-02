@@ -23,12 +23,13 @@ import qualified Data.Aeson.Micro           as J
 import qualified Data.Map                   as Map
 import qualified Data.Text                  as T
 import qualified Data.Text.Encoding         as T
+import qualified Data.Text.IO               as T
 
 import           Data.YAML                  as Y
 import           Data.YAML.Event            as YE
-import qualified Data.YAML.Token            as YI
+import qualified Data.YAML.Token            as YT
 
-import           TML
+import qualified TML
 
 main :: IO ()
 main = do
@@ -48,6 +49,9 @@ main = do
           exitFailure
 
     ("run-tml":args') -> cmdRunTml args'
+
+    ("testml-compiler":args') -> cmdTestmlCompiler args'
+
     _ -> do
       hPutStrLn stderr "usage: yaml-test <command> [<args>]"
       hPutStrLn stderr ""
@@ -55,7 +59,9 @@ main = do
       hPutStrLn stderr ""
       hPutStrLn stderr "  yaml2event       reads YAML stream from STDIN and dumps events to STDOUT"
       hPutStrLn stderr "  yaml2json        reads YAML stream from STDIN and dumps JSON to STDOUT"
-      hPutStrLn stderr "  run-tml          run/validate .tml file(s)"
+      hPutStrLn stderr "  run-tml          run/validate YAML-specific .tml file(s)"
+      hPutStrLn stderr "  testml-compiler  emulate testml-compiler"
+
       exitFailure
 
 
@@ -146,6 +152,9 @@ cmdYaml2Json = do
 
   return ()
 
+unescapeSpcTab :: T.Text -> T.Text
+unescapeSpcTab = T.replace "<SPC>" " " . T.replace "<TAB>" "\t"
+
 cmdRunTml :: [FilePath] -> IO ()
 cmdRunTml args = do
   results <- forM args $ \fn -> do
@@ -154,94 +163,116 @@ cmdRunTml args = do
     hPutStr stdout (fn ++ " : ")
     hFlush stdout
 
-    (label, dats) <- maybe (fail ("failed to parse " ++ fn)) pure $ decodeTml tml
+    TML.Document _ blocks <- either (fail . T.unpack) pure $ TML.parse fn (T.decodeUtf8 tml)
 
-    let isErr = isJust (lookup "error" dats)
+    forM blocks $ \(TML.Block label points) -> do
 
-        Just inYamlDat = BS.L.fromStrict   <$> lookup "in.yaml" dats
-        Just testEvDat = lines . T.unpack . T.decodeUtf8 <$> lookup "test.event" dats
+      let dats = [ (k,v) | TML.PointStr k v <- points ]
 
-        mInJsonDat :: Maybe [J.Value]
-        mInJsonDat = (maybe (error ("invalid JSON in " ++ show fn)) id . J.decodeStrictN) <$> lookup "in.json" dats
+      let isErr = isJust (lookup "error" dats)
 
-    case sequence (parseEvents inYamlDat) of
-      Left err
-        | isErr -> do
-            putStrLn "OK! (error)"
-            pure True
-        | otherwise -> do
-            putStrLn "FAIL!"
-            putStrLn ""
-            putStrLn "----------------------------------------------------------------------------"
-            putStrLn' (BS.unpack label)
-            putStrLn ""
-            putStrLn' (show err)
-            putStrLn ""
-            putStrLn' (show testEvDat)
-            putStrLn ""
-            BS.L.putStr inYamlDat
-            putStrLn ""
-            testParse inYamlDat
-            putStrLn ""
-            -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
-            putStrLn ""
-            putStrLn "----------------------------------------------------------------------------"
-            putStrLn ""
-            pure False
+          Just inYamlDat = BS.L.fromStrict . T.encodeUtf8 . unescapeSpcTab <$> lookup "in-yaml" dats
+          Just testEvDat = lines . T.unpack . unescapeSpcTab <$> lookup "test-event" dats
 
-      Right evs' -> do
-        let evs'' = map ev2str evs'
-        if evs'' == testEvDat
-           then do
+          mInJsonDat :: Maybe [J.Value]
+          mInJsonDat = (maybe (error ("invalid JSON in " ++ show fn)) id . J.decodeStrictN . T.encodeUtf8) <$> lookup "in-json" dats
 
-             case mInJsonDat of
-               Nothing -> do
-                 putStrLn "OK!"
-                 pure True
-               Just inJsonDat -> do
-                 iutJson <- either fail pure $ decodeAeson inYamlDat
+      case sequence (parseEvents inYamlDat) of
+        Left err
+          | isErr -> do
+              putStrLn "OK! (error)"
+              pure True
+          | otherwise -> do
+              putStrLn "FAIL!"
+              putStrLn ""
+              putStrLn "----------------------------------------------------------------------------"
+              putStrLn' (T.unpack label)
+              putStrLn ""
+              putStrLn' (show err)
+              putStrLn ""
+              putStrLn' (show testEvDat)
+              putStrLn ""
+              BS.L.putStr inYamlDat
+              putStrLn ""
+              testParse inYamlDat
+              putStrLn ""
+              -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
+              putStrLn ""
+              putStrLn "----------------------------------------------------------------------------"
+              putStrLn ""
+              pure False
 
-                 if iutJson == inJsonDat
-                   then do
-                     putStrLn "OK! (+JSON)"
-                     pure True
-                   else do
-                     putStrLn "FAIL! (bad JSON)"
+        Right evs' -> do
+          let evs'' = map ev2str evs'
+          if evs'' == testEvDat
+             then do
 
-                     putStrLn' ("ref = " ++ show inJsonDat)
-                     putStrLn' ("iut = " ++ show iutJson)
+               case mInJsonDat of
+                 Nothing -> do
+                   putStrLn "OK!"
+                   pure True
+                 Just inJsonDat -> do
+                   iutJson <- either fail pure $ decodeAeson inYamlDat
 
-                     pure False
+                   if iutJson == inJsonDat
+                     then do
+                       putStrLn "OK! (+JSON)"
+                       pure True
+                     else do
+                       putStrLn "FAIL! (bad JSON)"
 
-           else do
-             if isErr
-               then putStrLn "FAIL! (unexpected parser success)"
-               else putStrLn "FAIL!"
+                       putStrLn' ("ref = " ++ show inJsonDat)
+                       putStrLn' ("iut = " ++ show iutJson)
 
-             putStrLn ""
-             putStrLn "----------------------------------------------------------------------------"
-             putStrLn' (BS.unpack label)
-             putStrLn ""
-             putStrLn' ("ref = " ++ show testEvDat)
-             putStrLn' ("iut = " ++ show evs'')
-             putStrLn ""
-             BS.L.putStr inYamlDat
-             putStrLn ""
-             testParse inYamlDat
-             putStrLn ""
-             -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
-             putStrLn ""
-             putStrLn "----------------------------------------------------------------------------"
-             putStrLn ""
-             pure False
+                       pure False
+
+             else do
+               if isErr
+                 then putStrLn "FAIL! (unexpected parser success)"
+                 else putStrLn "FAIL!"
+
+               putStrLn ""
+               putStrLn "----------------------------------------------------------------------------"
+               putStrLn' (T.unpack label)
+               putStrLn ""
+               putStrLn' ("ref = " ++ show testEvDat)
+               putStrLn' ("iut = " ++ show evs'')
+               putStrLn ""
+               BS.L.putStr inYamlDat
+               putStrLn ""
+               testParse inYamlDat
+               putStrLn ""
+               -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
+               putStrLn ""
+               putStrLn "----------------------------------------------------------------------------"
+               putStrLn ""
+               pure False
 
   putStrLn ""
 
-  let ok = length (filter id results)
-      nok = length (filter not results)
+  let ok = length (filter id results')
+      nok = length (filter not results')
+      results' = concat results
 
   putStrLn ("done (passed: " ++ show ok ++ " / failed: " ++ show nok ++ ")")
 
+
+-- | Incomplete proof-of-concept 'testml-compiler' operation
+cmdTestmlCompiler :: [FilePath] -> IO ()
+cmdTestmlCompiler [fn0] = do
+  (fn,raw) <- case fn0 of
+    "-" -> (,) "<stdin>" <$> T.getContents
+    _   -> (,) fn0 <$> T.readFile fn0
+
+  case TML.parse fn raw of
+    Left e    -> T.hPutStrLn stderr e >> exitFailure
+    Right doc -> BS.putStrLn (J.encodeStrict doc)
+cmdTestmlCompiler _ = do
+  hPutStrLn stderr ("Usage: yaml-test testml-compiler [ <testml-file-name> | - ]")
+  exitFailure
+
+
+putStrLn' :: String -> IO ()
 putStrLn' msg = putStrLn ("  " ++ msg)
 
 
@@ -290,7 +321,7 @@ quote2 = concatMap go . T.unpack
 
 
 testParse :: BS.L.ByteString -> IO ()
-testParse bs0 = mapM_  (putStrLn' . showT) $ YI.tokenize bs0 False
+testParse bs0 = mapM_  (putStrLn' . showT) $ YT.tokenize bs0 False
   where
-    showT :: YI.Token -> String
-    showT t = replicate (YI.tLineChar t) ' ' ++ show (YI.tText t) ++ "  " ++ show (YI.tCode t)
+    showT :: YT.Token -> String
+    showT t = replicate (YT.tLineChar t) ' ' ++ show (YT.tText t) ++ "  " ++ show (YT.tCode t)

@@ -69,6 +69,7 @@ executable yaml-test
                  , containers
                  , mtl
                    -- non-inherited
+                 , megaparsec  >= 6.5.0 && < 6.6
                  , microaeson  == 0.1.*
                  , filepath    == 1.4.*
                  , directory   >= 1.2 && < 1.4
