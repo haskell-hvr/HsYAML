@@ -487,7 +487,6 @@ type Pattern = Parser ()
 -- \"UserState\", we just bundle the generic and specific fields together (not
 -- that it is that easy to draw the line - is @sLine@ generic or specific?).
 data State = State {
-    sName            :: !String,          -- ^ The input name for error messages.
     sEncoding        :: !Encoding,        -- ^ The input UTF encoding.
     sDecision        :: !String,          -- ^ Current decision name.
     sLimit           :: !Int,             -- ^ Lookahead characters limit.
@@ -511,8 +510,7 @@ data State = State {
 -- Showing a 'State' is only used in debugging. Note that forcing dump of
 -- @sInput@ will disable streaming it.
 instance Show State where
-  show state = "Name: "              ++ (show $ state|>sName)
-            ++ ", Encoding: "        ++ (show $ state|>sEncoding)
+  show state = "Encoding: "          ++ (show $ state|>sEncoding)
             ++ ", Decision: "        ++ (show $ state|>sDecision)
             ++ ", Limit: "           ++ (show $ state|>sLimit)
             ++ ", IsPeek: "          ++ (show $ state|>sIsPeek)
@@ -532,27 +530,29 @@ instance Show State where
 
 -- | @initialState name input@ returns an initial 'State' for parsing the
 -- /input/ (with /name/ for error messages).
-initialState :: String -> BLC.ByteString -> State
-initialState name input = let (encoding, decoded) = decode input
-                          in State { sName            = name,
-                                     sEncoding        = encoding,
-                                     sDecision        = "",
-                                     sLimit           = -1,
-                                     sForbidden       = Nothing,
-                                     sIsPeek          = False,
-                                     sIsSol           = True,
-                                     sChars           = [],
-                                     sCharsByteOffset = -1,
-                                     sCharsCharOffset = -1,
-                                     sCharsLine       = -1,
-                                     sCharsLineChar   = -1,
-                                     sByteOffset      = 0,
-                                     sCharOffset      = 0,
-                                     sLine            = 1,
-                                     sLineChar        = 0,
-                                     sCode            = Unparsed,
-                                     sLast            = ' ',
-                                     sInput           = decoded }
+initialState :: BLC.ByteString -> State
+initialState input
+  = State { sEncoding        = encoding
+          , sDecision        = ""
+          , sLimit           = -1
+          , sForbidden       = Nothing
+          , sIsPeek          = False
+          , sIsSol           = True
+          , sChars           = []
+          , sCharsByteOffset = -1
+          , sCharsCharOffset = -1
+          , sCharsLine       = -1
+          , sCharsLineChar   = -1
+          , sByteOffset      = 0
+          , sCharOffset      = 0
+          , sLine            = 1
+          , sLineChar        = 0
+          , sCode            = Unparsed
+          , sLast            = ' '
+          , sInput           = decoded
+          }
+  where
+    (encoding, decoded) = decode input
 
 -- *** Setters
 --
@@ -1169,18 +1169,18 @@ instance Read Chomp where
 -- We encapsulate the 'Parser' inside a 'Tokenizer'. This allows us to hide the
 -- implementation details from our callers.
 
--- | 'Tokenizer' converts a (named) input text into a list of 'Token'. Errors
+-- | 'Tokenizer' converts a input text into a list of 'Token'. Errors
 -- are reported as tokens with the @Error@ 'Code', and the unparsed text
 -- following an error may be attached as a final token (if the @Bool@ is
 -- @True@). Note that tokens are available \"immediately\", allowing for
 -- streaming of large YAML files with memory requirements depending only on the
 -- YAML nesting level.
-type Tokenizer = String -> BLC.ByteString -> Bool -> [Token]
+type Tokenizer = BLC.ByteString -> Bool -> [Token]
 
 -- | @patternTokenizer pattern@ converts the /pattern/ to a simple 'Tokenizer'.
 patternTokenizer :: Pattern -> Tokenizer
-patternTokenizer pattern name input withFollowing =
-  D.toList $ patternParser (wrap pattern) (initialState name input)
+patternTokenizer pattern input withFollowing =
+  D.toList $ patternParser (wrap pattern) (initialState input)
   where patternParser (Parser parser) state =
           let reply = parser state
               tokens = commitBugs reply
@@ -1226,8 +1226,8 @@ commitBugs reply =
                                                                tCode       = Error,
                                                                tText       = "Commit to '" ++ commit ++ "' was made outside it" }
 
--- | @'tokenize' name input emit_unparsed@
--- converts the Unicode /input/ (called /name/ in error messages) to a
+-- | @'tokenize' input emit_unparsed@
+-- converts the Unicode /input/ to a
 -- list of 'Token' according to the YAML 1.2 specification.
 --
 -- Errors are reported as tokens with @'Error' :: 'Code'@, and the
@@ -1235,7 +1235,7 @@ commitBugs reply =
 -- (if the /emit_unparsed/ argument is @True@). Note that tokens are available
 -- \"immediately\", allowing for streaming of large YAML files with
 -- memory requirements depending only on the YAML nesting level.
-tokenize :: String -> BLC.ByteString -> Bool -> [Token]
+tokenize :: BLC.ByteString -> Bool -> [Token]
 tokenize = patternTokenizer l_yaml_stream
 
 -- * Productions

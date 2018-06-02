@@ -92,7 +92,7 @@ getUriTag toks0 = do
   pure (T.pack $ concatMap Y.tText hs, toks2)
 
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) (Y.tokenize "" bs0 False))
+parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) (Y.tokenize bs0 False))
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)

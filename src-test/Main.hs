@@ -181,7 +181,7 @@ quote2 = concatMap go . T.unpack
 
 
 testParse :: BS.L.ByteString -> IO ()
-testParse bs0 = mapM_  (putStrLn' . showT) $ YI.yaml "" bs0 False
+testParse bs0 = mapM_  (putStrLn' . showT) $ YI.tokenize bs0 False
   where
     showT :: YI.Token -> String
     showT t = replicate (YI.tLineChar t) ' ' ++ show (YI.tText t) ++ "  " ++ show (YI.tCode t)
