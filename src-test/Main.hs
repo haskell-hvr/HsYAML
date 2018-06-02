@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- |
 -- Copyright: © Herbert Valerio Riedel 2018
 -- SPDX-License-Identifier: GPL-3.0
@@ -5,18 +7,24 @@
 module Main where
 
 import           Control.Monad
+import           Control.Monad.Identity
 import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.L
+import           Data.Int                   (Int64)
 import           Data.Maybe
 import           System.Directory
 import           System.Environment
 import           System.Exit
 import           System.FilePath
 import           System.IO
+import           Text.Read
 
+import qualified Data.Aeson.Micro           as J
+import qualified Data.Map                   as Map
 import qualified Data.Text                  as T
 import qualified Data.Text.Encoding         as T
-import           Data.YAML
+
+import           Data.YAML                  as Y
 import           Data.YAML.Event            as YE
 import qualified Data.YAML.Token            as YI
 
@@ -32,6 +40,13 @@ main = do
       | otherwise -> do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
+
+    ("yaml2json":args')
+      | null args' -> cmdYaml2Json
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2json sub-command"
+          exitFailure
+
     ("run-tml":args') -> cmdRunTml args'
     _ -> do
       hPutStrLn stderr "usage: yaml-test <command> [<args>]"
@@ -39,6 +54,7 @@ main = do
       hPutStrLn stderr "Commands:"
       hPutStrLn stderr ""
       hPutStrLn stderr "  yaml2event       reads YAML stream from STDIN and dumps events to STDOUT"
+      hPutStrLn stderr "  yaml2json        reads YAML stream from STDIN and dumps JSON to STDOUT"
       hPutStrLn stderr "  run-tml          run/validate .tml file(s)"
       exitFailure
 
@@ -57,6 +73,79 @@ cmdYaml2Event = do
       hFlush stdout
 
 
+decodeAeson :: BS.L.ByteString -> Either String [J.Value]
+decodeAeson bs0 = runIdentity (decodeLoader failsafeLoader bs0)
+  where
+    failsafeLoader = Loader { yScalar   = \t sty v -> pure $ scalar2json t sty v
+                            , ySequence = \t vs  -> pure $ Right (J.toJSON vs)
+                            , yMapping  = \t kvs -> pure $ (J.object <$> go kvs)
+                            , yAlias    = \_ c n -> pure $ if c then Left "cycle detected" else Right n
+                            , yAnchor   = \_ n   -> pure $ Right n
+                            }
+
+    scalar2json :: Maybe T.Text -> YE.Style -> T.Text -> Either String J.Value
+    scalar2json (Just t) _ v
+      | t == "tag:yaml.org,2002:null" = Right J.Null
+      | t == "tag:yaml.org,2002:str"  = Right (J.String v)
+      | t == "tag:yaml.org,2002:int"  = maybe (Left "invalid int") (Right . J.Number) $ decodeNumber v
+      | t == "tag:yaml.org,2002:float" = Left "invalid float"
+      | t == "tag:yaml.org,2002:bool" = case v of
+                                          "false" -> Right (J.Bool False)
+                                          "true"  -> Right (J.Bool True)
+                                          _       -> Left ("invalid bool")
+      | t == "!" = Right (J.String v)
+      | t == "?" = error (show t)
+      | t == "" = error (show t)
+    scalar2json Nothing YE.Plain v -- corresponds to '?' tag -- we apply core-schema rules
+      | v == "true"  = Right (J.Bool True)
+      | v == "false" = Right (J.Bool False)
+      | v == "null"  = Right (J.Null)
+      | v == ""      = Right (J.Null)
+      | Just n <- decodeNumber v = Right (J.Number n)
+      -- | otherwise    = Left ("couldn't resolve " ++ show v)
+    scalar2json _ _ v = Right (J.String v)
+
+    go :: [(J.Value,J.Value)] -> Either String [(T.Text, J.Value)]
+    go = mapM g
+      where
+        -- for numbers and @null@ we apply some implicit conversions
+        g :: (J.Value,J.Value) -> Either String (T.Text,J.Value)
+        g (J.Number t,v) = case doubleToInt64 t of
+                             Nothing -> Right (T.pack (show t),v)
+                             Just i  -> Right (T.pack (show i),v)
+        g (J.String t,v) = Right (t,v)
+        g (J.Null,v)     = Right ("",v)
+        g (k,_)          = Left ("dictionary entry had non-string key " ++ show k)
+
+
+
+-- | Try to convert 'Double' into 'Int64', return 'Nothing' if not
+-- representable loss-free as integral 'Int64' value.
+doubleToInt64 :: Double -> Maybe Int64
+doubleToInt64 x
+  | fromInteger x' == x
+  , x' <= toInteger (maxBound :: Int64)
+  , x' >= toInteger (minBound :: Int64)
+    = Just (fromIntegral x')
+  | otherwise = Nothing
+  where
+    x' = round x
+
+
+decodeNumber :: T.Text -> Maybe Double
+decodeNumber = readMaybe . T.unpack -- fixme
+
+cmdYaml2Json :: IO ()
+cmdYaml2Json = do
+  inYamlDat <- BS.L.getContents
+
+  case decodeAeson inYamlDat of
+    Left e -> fail e
+    Right vs -> do
+      forM_ vs $ \v -> BS.L.putStrLn (J.encode v)
+
+  return ()
+
 cmdRunTml :: [FilePath] -> IO ()
 cmdRunTml args = do
   results <- forM args $ \fn -> do
@@ -71,6 +160,9 @@ cmdRunTml args = do
 
         Just inYamlDat = BS.L.fromStrict   <$> lookup "in.yaml" dats
         Just testEvDat = lines . T.unpack . T.decodeUtf8 <$> lookup "test.event" dats
+
+        mInJsonDat :: Maybe [J.Value]
+        mInJsonDat = (maybe (error ("invalid JSON in " ++ show fn)) id . J.decodeStrictN) <$> lookup "in.json" dats
 
     case sequence (parseEvents inYamlDat) of
       Left err
@@ -101,8 +193,25 @@ cmdRunTml args = do
         let evs'' = map ev2str evs'
         if evs'' == testEvDat
            then do
-             putStrLn "OK!"
-             pure True
+
+             case mInJsonDat of
+               Nothing -> do
+                 putStrLn "OK!"
+                 pure True
+               Just inJsonDat -> do
+                 iutJson <- either fail pure $ decodeAeson inYamlDat
+
+                 if iutJson == inJsonDat
+                   then do
+                     putStrLn "OK! (+JSON)"
+                     pure True
+                   else do
+                     putStrLn "FAIL! (bad JSON)"
+
+                     putStrLn' ("ref = " ++ show inJsonDat)
+                     putStrLn' ("iut = " ++ show iutJson)
+
+                     pure False
 
            else do
              if isErr
