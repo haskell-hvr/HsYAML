@@ -1,8 +1,8 @@
-cabal-version:       1.12
+cabal-version:       1.14
 name:                HsYAML
-version:             0.0.0.0
+version:             0.1.0.0
 
-synopsis:            Pure Haskell YAML parser
+synopsis:            Pure Haskell YAML 1.2 parser
 homepage:            https://github.com/hvr/HsYAML
 license:             GPL-3
 license-file:        LICENSE
@@ -12,7 +12,8 @@ copyright:           2015-2018 Herbert Valerio Riedel
                    , 2007-2008 Oren Ben-Kiki
 category:            Text
 build-type:          Simple
-stability:           experimental
+description:
+  @HsYAML@ is a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) parser for Haskell.
 
 source-repository head
   type: git
