@@ -86,7 +86,7 @@ instance J.ToJSON Code where
   toJSON stmt@(CodeExpressionStmt lhs massert)
     | pobjs@(_:_) <- pointObjsInExpr stmt
       = J.Array [ J.String "%()"
-                , J.Array [ J.String ("*" <> p) | p <- pobjs ]
+                , J.Array [ J.String ("*" `mappend` p) | p <- pobjs ]
                 , expr'
                 ]
     | otherwise = expr'

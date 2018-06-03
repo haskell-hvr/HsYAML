@@ -24,14 +24,13 @@ module Data.YAML.Token
   , Code(..)
   ) where
 
-import           Control.Applicative        (Applicative (..))
-import           Control.Monad              (ap, liftM)
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Char                  (chr, ord)
 import qualified Data.DList                 as D
-import qualified Data.Map                   as Map
 import           Prelude                    hiding ((*), (+), (-), (/), (^))
 import qualified Prelude
+
+import           Util                       hiding (empty)
 
 -- * Generic operators
 --

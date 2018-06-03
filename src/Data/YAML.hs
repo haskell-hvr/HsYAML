@@ -1,249 +1,416 @@
-{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE RecursiveDo                #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE Trustworthy                #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
 -- SPDX-License-Identifier: GPL-3.0
 --
--- Document oriented YAML parsing API
+-- Document oriented YAML parsing API inspired by [aeson](http://hackage.haskell.org/package/aeson).
+--
+-- === Usage Example
+--
+-- Let's assume we want to decode a simple YAML document
+--
+-- > - name: Erik Weisz
+-- >   age: 52
+-- >   magic: True
+-- > - name: Mina Crandon
+-- >   age: 53
+--
+-- into a Haskell list of person records, i.e. a value of type @[Person]@.
+--
+-- The code below shows how to manually define a @Person@ record type together with a 'FromYAML' instance:
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- >
+-- > import Data.YAML
+-- >
+-- > data Person = Person
+-- >     { name  :: Text
+-- >     , age   :: Int
+-- >     , magic :: Bool
+-- >     } deriving Show
+-- >
+-- > instance FromYAML Person where
+-- >    parseYAML = withMap "Person" $ \m -> Person
+-- >        <$> m .: "name"
+-- >        <*> m .: "age"
+-- >        <*> m .:? "magic" .!= False
+--
+-- And now we can 'decode' the YAML document like so:
+--
+-- >>> decode "- name: Erik Weisz\n  age: 52\n  magic: True\n- name: Mina Crandon\n  age: 53" :: Either String [[Person]]
+-- Right [[Person {name = "Erik Weisz", age = 52, magic = True},Person {name = "Mina Crandon", age = 53, magic = False}]]
+--
 --
 module Data.YAML
-    ( decodeLoader, Loader(..), NodeId
-    , decodeNode, decodeNode', Doc(..), Node(..)
+    (
+      -- * Typeclass-based resolving/decoding
+      decode
+    , FromYAML(..)
+    , Parser
+    , parseEither
+
+      -- ** Accessors for YAML 'Mapping's
+    , Mapping
+    , (.:), (.:?), (.:!), (.!=)
+
+      -- ** Prism-style parsers
+    , withSeq
+    , withBool
+    , withFloat
+    , withInt
+    , withNull
+    , withStr
+    , withMap
+
+      -- * \"Concrete\" AST
+    , decodeNode
+    , decodeNode'
+    , Doc(..)
+    , Node(..)
+    , Scalar(..)
+
+      -- * YAML 1.2 Schema resolvers
+    , SchemaResolver(..)
+    , failsafeSchemaResolver
+    , jsonSchemaResolver
+    , coreSchemaResolver
+
+      -- * Generalised AST construction
+    , decodeLoader
+    , Loader(..)
+    , NodeId
+
     ) where
 
-import           Control.Applicative
-import           Control.Monad.Except
-import           Control.Monad.Identity
-import           Control.Monad.State
-import qualified Data.ByteString.Lazy   as BS.L
-import           Data.Map               (Map)
-import qualified Data.Map               as Map
-import           Data.Monoid            (mempty)
-import           Data.Set               (Set)
-import qualified Data.Set               as Set
-import           Data.Text              (Text)
-import           Data.Word
+import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.Map             as Map
+import qualified Data.Text            as T
 
-import           Data.YAML.Event        (Tag)
-import qualified Data.YAML.Event        as YE
+import           Data.YAML.Event      (Tag, isUntagged, tagToText)
+import           Data.YAML.Loader
+import           Data.YAML.Schema
 
-#if !MIN_VERSION_mtl(2,2,2)
-liftEither :: MonadError e m => Either e a -> m a
-liftEither = either throwError return
-#endif
+import           Util
 
-{-
--- TODO: this is the JSON-ish semantic data-model; we need a YAML AST at some point
-data Value = Object !(Map Text Value)
-           | Array  [Value]
-           | String !Text
-           | Number !Double
-           | Bool   !Bool
-           | Null
-           deriving (Ord,Eq)
--}
+-- | YAML Document tree/graph
+newtype Doc n = Doc n deriving (Eq,Ord,Show)
+
+-- | YAML Document node
+data Node = Scalar   !Scalar
+          | Mapping  !Tag Mapping
+          | Sequence !Tag [Node]
+          | Anchor   !NodeId !Node
+          deriving (Eq,Ord,Show)
+
+-- | YAML mapping
+type Mapping = Map Node Node
+
+-- | Retrieve value in 'Mapping' indexed by a @!!str@ 'Text' key.
+--
+-- This parser fails if the key doesn't exist.
+(.:) :: FromYAML a => Mapping -> Text -> Parser a
+m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (Scalar (SStr k)) m)
+
+-- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
+--
+-- 'Nothing' is returned if the key is missing or points to a @tag:yaml.org,2002:null@ node.
+-- This combinator only fails if the key exists but cannot be converted to the required type.
+--
+-- See also '.:!'.
+(.:?) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
+m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar (SStr k)) m)
+
+-- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
+--
+-- 'Nothing' is returned if the key is missing.
+-- This combinator only fails if the key exists but cannot be converted to the required type.
+--
+-- __NOTE__: This is a variant of '.:?' which doesn't map a @tag:yaml.org,2002:null@ node to 'Nothing'.
+(.:!) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
+m .:! k = maybe (pure Nothing) (fmap Just . parseYAML) (Map.lookup (Scalar (SStr k)) m)
+
+-- | Defaulting helper to be used with '.:?' or '.:!'.
+(.!=) :: Parser (Maybe a) -> a -> Parser a
+mv .!= def = fmap (maybe def id) mv
+
+
+-- | Parse and decode YAML document(s) into 'Node' graphs
+--
+-- This is a convenience wrapper over `decodeNode'`
+--
+-- > decodeNode = decodeNode' coreSchemaResolver False False
+--
+-- In other words,
+--
+-- * Use the YAML 1.2 Core schema for resolving
+-- * Don't create 'Anchor' nodes
+-- * Disallow cyclic anchor references
+--
+decodeNode :: BS.L.ByteString -> Either String [Doc Node]
+decodeNode = decodeNode' coreSchemaResolver False False
+
+
+-- | Customizable variant of 'decodeNode'
+--
+decodeNode' :: SchemaResolver  -- ^ YAML Schema resolver to use
+            -> Bool            -- ^ Whether to emit anchor nodes
+            -> Bool            -- ^ Whether to allow cyclic references
+            -> BS.L.ByteString -- ^ YAML document to parse
+            -> Either String [Doc Node]
+decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
+  = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
+  where
+    failsafeLoader = Loader { yScalar   = \t s v -> pure $ fmap Scalar (schemaResolverScalar t s v)
+                            , ySequence = \t vs  -> pure $ schemaResolverSequence t >>= \t' -> Right (Sequence t' vs)
+                            , yMapping  = \t kvs -> pure $ schemaResolverMapping  t >>= \t' -> Right (Mapping t' (Map.fromList kvs))
+                            , yAlias    = if allowCycles
+                                          then \_ _ n -> pure $ Right n
+                                          else \_ c n -> pure $ if c then Left "cycle detected" else Right n
+                            , yAnchor   = if anchorNodes
+                                          then \j n   -> pure $ Right (Anchor j n)
+                                          else \_ n   -> pure $ Right n
+                            }
+
 
 ----------------------------------------------------------------------------
 
-data S n = S { sEvs   :: [YE.Event]
-             , sDict  :: Map YE.Anchor (Word,n)
-             , sCycle :: Set YE.Anchor
-             , sIdCnt :: !Word
-             }
+-- | YAML Parser 'Monad' used by 'FromYAML'
+--
+-- See also 'parseEither' or 'decode'
+newtype Parser a = P { unP :: Either String a }
+                 deriving (Functor,Applicative)
 
-newtype PT n m a = PT (StateT (S n) (ExceptT String m) a)
-                 deriving ( Functor
-                          , Applicative
-                          , Monad
-                          , MonadState (S n)
-                          , MonadError String
-                          , MonadFix
-                          )
+-- TODO: MonadFail
+instance Monad Parser where
+  return = pure
+  P m >>= k = P (m >>= unP . k)
+  (>>) = (*>)
+  fail = P . Left
 
-instance MonadTrans (PT n) where
-  lift = PT . lift . lift
+-- | Run 'Parser'
+--
+-- A common use-case is 'parseEither' 'parseYAML'.
+parseEither :: Parser a -> Either String a
+parseEither = unP
 
-runParserT :: Monad m => PT n m a -> [YE.Event] -> m (Either String a)
-runParserT (PT act) s0 = runExceptT $ evalStateT act (S s0 mempty mempty 0)
-
-satisfy :: Monad m => (YE.Event -> Bool) -> PT n m YE.Event
-satisfy p = do
-  s0 <- get
-  case sEvs s0 of
-    [] -> throwError "satisfy: premature eof"
-    (ev:rest)
-       | p ev -> do put (s0 { sEvs = rest})
-                    return ev
-       | otherwise -> throwError ("satisfy: predicate failed " ++ show ev)
-
-
-peek :: Monad m => PT n m (Maybe YE.Event)
-peek = do
-  s0 <- get
-  case sEvs s0 of
-    []     -> return Nothing
-    (ev:_) -> return (Just ev)
-
-peek1 :: Monad m => PT n m YE.Event
-peek1 = maybe (throwError "peek1: premature eof") return =<< peek
-
-anyEv :: Monad m => PT n m YE.Event
-anyEv = satisfy (const True)
-
-eof :: Monad m => PT n m ()
-eof = do
-  s0 <- get
-  case sEvs s0 of
-    [] -> return ()
-    _  -> throwError "eof expected"
-
--- NB: consumes the end-event
-manyUnless :: Monad m => (YE.Event -> Bool) -> PT n m a -> PT n m [a]
-manyUnless p act = do
-  t0 <- peek1
-  if p t0
-    then anyEv >> return []
-    else liftM2 (:) act (manyUnless p act)
-
-
-type NodeId = Word
-
-data Loader m n = Loader
-  { yScalar   :: Tag -> YE.Style -> Text -> m (Either String n)
-  , ySequence :: Tag -> [n]              -> m (Either String n)
-  , yMapping  :: Tag -> [(n,n)]          -> m (Either String n)
-  , yAlias    :: NodeId -> Bool -> n     -> m (Either String n)
-  , yAnchor   :: NodeId -> n             -> m (Either String n)
-  }
-
-
-{-# INLINEABLE decodeLoader #-}
-decodeLoader :: forall n m . MonadFix m => Loader m n -> BS.L.ByteString -> m (Either String [n])
-decodeLoader Loader{..} bs0 = do
-    case sequence . YE.parseEvents $ bs0 of
-      Left (_,err) -> return (Left err)
-      Right evs    -> runParserT goStream evs
+-- helper
+failTypeMismatch :: String -> Node -> Parser a
+failTypeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ got)
   where
-    goStream :: PT n m [n]
-    goStream = do
-      _ <- satisfy (== YE.StreamStart)
-      ds <- manyUnless (== YE.StreamEnd) goDoc
-      eof
-      return ds
+    got = case node of
+            Scalar (SBool _)             -> "!!bool"
+            Scalar (SInt _)              -> "!!int"
+            Scalar  SNull                -> "!!null"
+            Scalar (SStr _)              -> "!!str"
+            Scalar (SFloat _)            -> "!!float"
+            Scalar (SUnknown t v)
+              | isUntagged t             -> tagged t ++ show v
+              | otherwise                -> "(unsupported) " ++ tagged t ++ "scalar"
+            (Anchor _ _)                 -> "anchor"
+            (Mapping t _)                -> tagged t ++ " mapping"
+            (Sequence t _)               -> tagged t ++ " sequence"
 
-    goDoc :: PT n m n
-    goDoc = do
-      _ <- satisfy isDocStart
-      modify $ \s0 -> s0 { sDict = mempty, sCycle = mempty }
-      n <- goNode
-      _ <- satisfy isDocEnd
-      return n
+    tagged t0 = case tagToText t0 of
+               Nothing -> "non-specifically ? tagged (i.e. unresolved) "
+               Just t  -> T.unpack t ++ " tagged"
 
-    getNewNid :: PT n m Word
-    getNewNid = state $ \s0 -> let i0 = sIdCnt s0
-                               in (i0, s0 { sIdCnt = i0+1 })
+-- | A type into which YAML nodes can be converted/deserialized
+class FromYAML a where
+  parseYAML :: Node -> Parser a
 
-    returnNode :: (Maybe YE.Anchor) -> Either String n -> PT n m n
-    returnNode _ (Left err) = throwError err
-    returnNode Nothing (Right node) = return node
-    returnNode (Just a) (Right node) = do
-      nid <- getNewNid
-      node0 <- lift $ yAnchor nid node
-      node' <- liftEither node0
-      modify $ \s0 -> s0 { sDict = Map.insert a (nid,node') (sDict s0) }
-      return node'
-
-    registerAnchor :: Maybe YE.Anchor -> PT n m n -> PT n m n
-    registerAnchor Nothing  pn = pn
-    registerAnchor (Just a) pn = do
-      modify $ \s0 -> s0 { sCycle = Set.insert a (sCycle s0) }
-      nid <- getNewNid
-
-      mdo
-        modify $ \s0 -> s0 { sDict = Map.insert a (nid,n) (sDict s0) }
-        n0 <- pn
-        n1 <- lift $ yAnchor nid n0
-        n <-  liftEither n1
-        return n
-
-    exitAnchor :: Maybe YE.Anchor -> PT n m ()
-    exitAnchor Nothing = return ()
-    exitAnchor (Just a) = modify $ \s0 -> s0 { sCycle = Set.delete a (sCycle s0) }
-
-    goNode :: PT n m n
-    goNode = do
-      n <- satisfy (const True)
-      case n of
-        YE.Scalar manc tag sty val -> do
-          exitAnchor manc
-          n' <- lift $ yScalar tag sty val
-          returnNode manc $! n'
-
-        YE.SequenceStart manc tag -> registerAnchor manc $ do
-          ns <- manyUnless (== YE.SequenceEnd) goNode
-          exitAnchor manc
-          liftEither =<< (lift $ ySequence tag ns)
-
-        YE.MappingStart manc tag -> registerAnchor manc $ do
-          kvs <- manyUnless (== YE.MappingEnd) (liftM2 (,) goNode goNode)
-          exitAnchor manc
-          liftEither =<< (lift $ yMapping tag kvs)
-
-        YE.Alias a -> do
-          d <- gets sDict
-          cy <- gets sCycle
-          case Map.lookup a d of
-            Nothing -> throwError ("anchor not found: " ++ show a)
-            Just (nid,n') -> liftEither =<< (lift $ yAlias nid (Set.member a cy) n')
-
-        _ -> throwError "goNode: unexpected event"
+-- | Operate on @tag:yaml.org,2002:null@ node (or fail)
+withNull :: String -> Parser a -> Node -> Parser a
+withNull _        f (Scalar SNull) = f
+withNull expected _ v              = failTypeMismatch expected v
 
 
-newtype Doc n = Doc n deriving (Eq,Ord,Show)
+-- | Trivial instance
+instance FromYAML Node where
+  parseYAML = pure
 
--- failsafe schema
-data Node = Scalar !Tag !Text
-          | Mapping !Tag (Map Node Node)
-          | Sequence !Tag [Node]
-          | Anchor !NodeId !Node
-          deriving (Eq,Ord,Show)
+instance FromYAML Bool where
+  parseYAML = withBool "!!bool" pure
 
-decodeNode :: BS.L.ByteString -> Either String [Doc Node]
-decodeNode bs0 = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
-  where
-    failsafeLoader = Loader { yScalar   = \t _ v -> pure $ Right (Scalar t v)
-                            , ySequence = \t vs  -> pure $ Right (Sequence t vs)
-                            , yMapping  = \t kvs -> pure $ Right (Mapping t (Map.fromList kvs))
-                            , yAlias    = \_ _ n -> pure $ Right n
-                            , yAnchor   = \j n   -> pure $ Right (Anchor j n)
-                            }
+-- | Operate on @tag:yaml.org,2002:bool@ node (or fail)
+withBool :: String -> (Bool -> Parser a) -> Node -> Parser a
+withBool _        f (Scalar (SBool b)) = f b
+withBool expected _ v                  = failTypeMismatch expected v
 
-decodeNode' :: BS.L.ByteString -> Either String [Doc Node]
-decodeNode' bs0 = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
-  where
-    failsafeLoader = Loader { yScalar   = \t _ v -> pure $ Right (Scalar t v)
-                            , ySequence = \t vs  -> pure $ Right (Sequence t vs)
-                            , yMapping  = \t kvs -> pure $ Right (Mapping t (Map.fromList kvs))
-                            , yAlias    = \_ c n -> pure $ if c then Left "cycle detected" else Right n
-                            , yAnchor   = \_ n   -> pure $ Right n
-                            }
+instance FromYAML Text where
+  parseYAML = withStr "!!str" pure
 
-{-
-tryError :: MonadError e m => m a -> m (Either e a)
-tryError act = catchError (Right <$> act) (pure . Left)
--}
+-- | Operate on @tag:yaml.org,2002:str@ node (or fail)
+withStr :: String -> (Text -> Parser a) -> Node -> Parser a
+withStr _        f (Scalar (SStr b)) = f b
+withStr expected _ v                 = failTypeMismatch expected v
 
-isDocStart :: YE.Event -> Bool
-isDocStart (YE.DocumentStart _) = True
-isDocStart _                    = False
+instance FromYAML Integer where
+  parseYAML = withInt "!!int" pure
 
-isDocEnd :: YE.Event -> Bool
-isDocEnd (YE.DocumentEnd _) = True
-isDocEnd _                  = False
+-- | Operate on @tag:yaml.org,2002:int@ node (or fail)
+withInt :: String -> (Integer -> Parser a) -> Node -> Parser a
+withInt _        f (Scalar (SInt b)) = f b
+withInt expected _ v                 = failTypeMismatch expected v
+
+instance FromYAML Double where
+  parseYAML = withFloat "!!float" pure
+
+-- | Operate on @tag:yaml.org,2002:float@ node (or fail)
+withFloat :: String -> (Double -> Parser a) -> Node -> Parser a
+withFloat _        f (Scalar (SFloat b)) = f b
+withFloat expected _ v                   = failTypeMismatch expected v
+
+-- signed fixed-width integers
+
+instance FromYAML Int where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Int8 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int8'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Int16 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int16'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Int32 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int32'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Int64 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int64'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+
+instance FromYAML Word where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Word8 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word8'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Word16 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word16'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Word32 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word32'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance FromYAML Word64 where
+  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word64'") pure $ fromIntegerMaybe b
+  parseYAML n                    = failTypeMismatch "!!int" n
+
+instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
+  parseYAML = withMap "!!map" $ \xs -> Map.fromList <$> mapM (\(a,b) -> (,) <$> parseYAML a <*> parseYAML b) (Map.toList xs)
+
+-- | Operate on @tag:yaml.org,2002:seq@ node (or fail)
+withMap :: String -> (Mapping -> Parser a) -> Node -> Parser a
+withMap _        f (Mapping tag xs)
+  | tag == tagMap    = f xs
+withMap expected _ v = failTypeMismatch expected v
+
+instance FromYAML v => FromYAML [v] where
+  parseYAML = withSeq "!!seq" (mapM parseYAML)
+
+-- | Operate on @tag:yaml.org,2002:seq@ node (or fail)
+withSeq :: String -> ([Node] -> Parser a) -> Node -> Parser a
+withSeq _        f (Sequence tag xs)
+  | tag == tagSeq    = f xs
+withSeq expected _ v = failTypeMismatch expected v
+
+instance FromYAML a => FromYAML (Maybe a) where
+  parseYAML (Scalar SNull) = pure Nothing
+  parseYAML j              = Just <$> parseYAML j
+
+----------------------------------------------------------------------------
+
+instance (FromYAML a, FromYAML b) => FromYAML (a,b) where
+  parseYAML = withSeq "!!seq" $ \xs ->
+                           case xs of
+                             [a,b] -> (,) <$> parseYAML a
+                                          <*> parseYAML b
+                             _     -> fail ("expected 2-sequence but got " ++ show (length xs) ++ "-sequence instead")
+
+instance (FromYAML a, FromYAML b, FromYAML c) => FromYAML (a,b,c) where
+  parseYAML = withSeq "!!seq" $ \xs ->
+                           case xs of
+                             [a,b,c] -> (,,) <$> parseYAML a
+                                             <*> parseYAML b
+                                             <*> parseYAML c
+                             _     -> fail ("expected 3-sequence but got " ++ show (length xs) ++ "-sequence instead")
+
+
+instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d) => FromYAML (a,b,c,d) where
+  parseYAML = withSeq "!!seq" $ \xs ->
+                           case xs of
+                             [a,b,c,d] -> (,,,) <$> parseYAML a
+                                                <*> parseYAML b
+                                                <*> parseYAML c
+                                                <*> parseYAML d
+                             _     -> fail ("expected 4-sequence but got " ++ show (length xs) ++ "-sequence instead")
+
+
+instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e) => FromYAML (a,b,c,d,e) where
+  parseYAML = withSeq "!!seq" $ \xs ->
+                           case xs of
+                             [a,b,c,d,e] -> (,,,,) <$> parseYAML a
+                                                   <*> parseYAML b
+                                                   <*> parseYAML c
+                                                   <*> parseYAML d
+                                                   <*> parseYAML e
+                             _     -> fail ("expected 5-sequence but got " ++ show (length xs) ++ "-sequence instead")
+
+
+instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f) => FromYAML (a,b,c,d,e,f) where
+  parseYAML = withSeq "!!seq" $ \xs ->
+                           case xs of
+                             [a,b,c,d,e,f] -> (,,,,,) <$> parseYAML a
+                                                      <*> parseYAML b
+                                                      <*> parseYAML c
+                                                      <*> parseYAML d
+                                                      <*> parseYAML e
+                                                      <*> parseYAML f
+                             _     -> fail ("expected 6-sequence but got " ++ show (length xs) ++ "-sequence instead")
+
+
+instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f, FromYAML g) => FromYAML (a,b,c,d,e,f,g) where
+  parseYAML = withSeq "!!seq" $ \xs ->
+                           case xs of
+                             [a,b,c,d,e,f,g] -> (,,,,,,) <$> parseYAML a
+                                                         <*> parseYAML b
+                                                         <*> parseYAML c
+                                                         <*> parseYAML d
+                                                         <*> parseYAML e
+                                                         <*> parseYAML f
+                                                         <*> parseYAML g
+                             _     -> fail ("expected 7-sequence but got " ++ show (length xs) ++ "-sequence instead")
+
+
+-- | Decode YAML document(s) using the YAML 1.2 Core schema
+--
+-- Each document contained in the YAML stream produce one element of
+-- the response list. Here's an example of decoding two concatenated
+-- YAML documents:
+--
+-- >>> decode "Foo\n---\nBar" :: Either String [Text]
+-- Right ["Foo","Bar"]
+--
+-- Note that an empty stream doesn't contain any (non-comment)
+-- document nodes, and therefore results in an empty result list:
+--
+-- >>> decode "# just a comment" :: Either String [Text]
+-- Right []
+--
+-- 'decode' uses the same settings as 'decodeNode' for tag-resolving. If
+-- you need a different custom parsing configuration, you need to
+-- combine 'parseEither' and `decodeNode'` yourself.
+decode :: FromYAML v => BS.L.ByteString -> Either String [v]
+decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+

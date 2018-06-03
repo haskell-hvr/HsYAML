@@ -20,7 +20,9 @@ import           System.IO
 import           Text.Read
 
 import qualified Data.Aeson.Micro           as J
+import           Data.Map                   (Map)
 import qualified Data.Map                   as Map
+import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import qualified Data.Text.Encoding         as T
 import qualified Data.Text.IO               as T
@@ -78,52 +80,54 @@ cmdYaml2Event = do
       hPutStrLn stdout (ev2str event)
       hFlush stdout
 
+-- | 'J.Value' look-alike
+data Value' = Object'  (Map Text Value')
+            | Array'   [Value']
+            | String'  !Text
+            | NumberD' !Double
+            | NumberI' !Integer
+            | Bool'    !Bool
+            | Null'
+            deriving Show
+
+toProperValue :: Value' -> J.Value
+toProperValue v = case v of
+  Null'      -> J.Null
+  String' t  -> J.String t
+  NumberD' x -> J.Number x
+  NumberI' x -> J.Number (fromInteger x)
+  Bool' b    -> J.Bool b
+  Array' xs  -> J.Array (map toProperValue xs)
+  Object' xs -> J.Object (fmap toProperValue xs)
+
+instance FromYAML Value' where
+  parseYAML (Y.Scalar s) = case s of
+    SNull        -> pure Null'
+    SBool b      -> pure (Bool' b)
+    SFloat x     -> pure (NumberD' x)
+    SInt x       -> pure (NumberI' x)
+    SStr t       -> pure (String' t)
+    SUnknown _ t -> pure (String' t) -- HACK
+
+  parseYAML (Y.Sequence _ xs) = Array' <$> mapM parseYAML xs
+
+  parseYAML (Y.Mapping _ m) = Object' . Map.fromList <$> mapM parseKV (Map.toList m)
+    where
+      parseKV :: (Y.Node,Y.Node) -> Parser (Text,Value')
+      parseKV (k,v) = (,) <$> parseK k <*> parseYAML v
+
+      -- for numbers and !!null we apply implicit conversions
+      parseK n = do
+        k <- parseYAML n
+        case k of
+          NumberI' t -> pure (T.pack (show t))
+          NumberD' t -> pure (T.pack (show t))
+          String' t  -> pure t
+          Null'      -> pure ""
+          _          -> fail ("dictionary entry had non-string key " ++ show k)
 
 decodeAeson :: BS.L.ByteString -> Either String [J.Value]
-decodeAeson bs0 = runIdentity (decodeLoader failsafeLoader bs0)
-  where
-    failsafeLoader = Loader { yScalar   = \t sty v -> pure $ scalar2json t sty v
-                            , ySequence = \t vs  -> pure $ Right (J.toJSON vs)
-                            , yMapping  = \t kvs -> pure $ (J.object <$> go kvs)
-                            , yAlias    = \_ c n -> pure $ if c then Left "cycle detected" else Right n
-                            , yAnchor   = \_ n   -> pure $ Right n
-                            }
-
-    scalar2json :: Maybe T.Text -> YE.Style -> T.Text -> Either String J.Value
-    scalar2json (Just t) _ v
-      | t == "tag:yaml.org,2002:null" = Right J.Null
-      | t == "tag:yaml.org,2002:str"  = Right (J.String v)
-      | t == "tag:yaml.org,2002:int"  = maybe (Left "invalid int") (Right . J.Number) $ decodeNumber v
-      | t == "tag:yaml.org,2002:float" = Left "invalid float"
-      | t == "tag:yaml.org,2002:bool" = case v of
-                                          "false" -> Right (J.Bool False)
-                                          "true"  -> Right (J.Bool True)
-                                          _       -> Left ("invalid bool")
-      | t == "!" = Right (J.String v)
-      | t == "?" = error (show t)
-      | t == "" = error (show t)
-    scalar2json Nothing YE.Plain v -- corresponds to '?' tag -- we apply core-schema rules
-      | v == "true"  = Right (J.Bool True)
-      | v == "false" = Right (J.Bool False)
-      | v == "null"  = Right (J.Null)
-      | v == ""      = Right (J.Null)
-      | Just n <- decodeNumber v = Right (J.Number n)
-      -- | otherwise    = Left ("couldn't resolve " ++ show v)
-    scalar2json _ _ v = Right (J.String v)
-
-    go :: [(J.Value,J.Value)] -> Either String [(T.Text, J.Value)]
-    go = mapM g
-      where
-        -- for numbers and @null@ we apply some implicit conversions
-        g :: (J.Value,J.Value) -> Either String (T.Text,J.Value)
-        g (J.Number t,v) = case doubleToInt64 t of
-                             Nothing -> Right (T.pack (show t),v)
-                             Just i  -> Right (T.pack (show i),v)
-        g (J.String t,v) = Right (t,v)
-        g (J.Null,v)     = Right ("",v)
-        g (k,_)          = Left ("dictionary entry had non-string key " ++ show k)
-
-
+decodeAeson = fmap (map toProperValue) . decode
 
 -- | Try to convert 'Double' into 'Int64', return 'Nothing' if not
 -- representable loss-free as integral 'Int64' value.
@@ -303,7 +307,7 @@ ancTagStr manc mtag = anc' ++ tag'
              Nothing  -> ""
              Just anc -> " &" ++ T.unpack anc
 
-    tag' = case mtag of
+    tag' = case tagToText mtag of
              Nothing -> ""
              Just t  -> " <" ++ T.unpack t ++ ">"
 

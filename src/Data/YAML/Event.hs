@@ -11,20 +11,19 @@ module Data.YAML.Event
     , EvStream
     , Event(..)
     , Style(..)
-    , Tag
+    , Tag, untagged, isUntagged, tagToText, mkTag
     , Anchor
+    , Pos(..)
     ) where
 
-import           Control.Applicative  (Applicative (..))
 import qualified Data.ByteString.Lazy as BS.L
 import           Data.Char
-import           Data.Map             (Map)
 import qualified Data.Map             as Map
-import           Data.Monoid          (Monoid (mappend, mempty))
-import           Data.Text            (Text)
 import qualified Data.Text            as T
 import qualified Data.YAML.Token      as Y
 import           Numeric              (readHex)
+
+import           Util
 
 -- TODO: consider also non-essential attributes
 
@@ -61,7 +60,50 @@ data Event
 type Anchor = Text
 
 -- | YAML Tags
-type Tag = Maybe Text
+newtype Tag = Tag (Maybe Text)
+            deriving (Eq,Ord)
+
+instance Show Tag where
+  show (Tag x) = show x
+
+-- | Convert 'Tag' to its string representation
+--
+-- Returns 'Nothing' for 'untagged'
+tagToText :: Tag -> Maybe T.Text
+tagToText (Tag x) = x
+
+-- | An \"untagged\" YAML tag
+untagged :: Tag
+untagged = Tag Nothing
+
+-- | Equivalent to @(== 'untagged')@
+isUntagged :: Tag -> Bool
+isUntagged (Tag Nothing) = True
+isUntagged _             = False
+
+-- | Construct YAML tag
+mkTag :: String -> Tag
+mkTag "" = error "mkTag"
+mkTag "!" = Tag (Just $! T.pack "!")
+mkTag s   = Tag (Just $! tagUnescape s)
+  where
+    tagUnescape = T.pack . go
+      where
+        go [] = []
+        go ('%':h:l:cs)
+          | Just c <- decodeL1 [h,l] = c : go cs
+        go (c:cs) = c : go cs
+
+
+mkTag' :: String -> Tag
+mkTag' "" = error "mkTag'"
+mkTag' s  = Tag (Just $! T.pack s)
+
+mkTag'' :: String -> Tag
+mkTag'' "" = error "mkTag''"
+mkTag'' s  = Tag (Just $! T.pack ("tag:yaml.org,2002:" ++ s))
+
+
 
 -- | Event stream produced by 'parseEvents'
 --
@@ -86,19 +128,11 @@ data Style = Plain
            | DoubleQuoted
            | Literal
            | Folded
-           deriving (Eq,Show)
+           deriving (Eq,Ord,Show)
 
 -- internal
 type TagHandle = Text
 type Props = (Maybe Text,Tag)
-
-tagUnescape :: Text -> Text
-tagUnescape = T.pack . go . T.unpack
-  where
-    go [] = []
-    go ('%':h:l:cs)
-      | Just c <- decodeL1 [h,l] = c : go cs
-    go (c:cs) = c : go cs
 
 getHandle :: [Y.Token] -> Maybe (TagHandle,[Y.Token])
 getHandle toks0 = do
@@ -111,6 +145,25 @@ getUriTag toks0 = do
   Y.Token { Y.tCode = Y.BeginTag } : toks1 <- Just toks0
   (hs,Y.Token { Y.tCode = Y.EndTag } : toks2) <- Just $ span (\Y.Token { Y.tCode = c } -> c `elem` [Y.Indicator,Y.Meta]) toks1
   pure (T.pack $ concatMap Y.tText hs, toks2)
+
+{- WARNING: the code that follows will make you cry; a safety pig is provided below for your benefit.
+
+                         _
+ _._ _..._ .-',     _.._(`))
+'-. `     '  /-._.-'    ',/
+   )         \            '.
+  / _    _    |             \
+ |  a    a    /              |
+ \   .-.                     ;
+  '-('' ).-'       ,'       ;
+     '-;           |      .'
+        \           \    /
+        | 7  .__  _.-\   \
+        | |  |  ``/  /`  /
+       /,_|  |   /,_/   /
+          /,_/      '`-'
+
+-}
 
 -- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
 parseEvents :: BS.L.ByteString -> EvStream
@@ -164,17 +217,18 @@ parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (
 
 err :: Tok2EvStream
 err (tok@Y.Token { Y.tCode = Y.Error, Y.tText = msg } : _) = [Left (tok2pos tok, msg)]
-err (tok : _) = [Left (tok2pos tok, "Internal error")]
+err (tok@Y.Token { Y.tCode = Y.Unparsed, Y.tText = txt } : _) = [Left (tok2pos tok, ("Lexical error near " ++ show txt))]
+err (tok@Y.Token { Y.tCode = code } : _) = [Left (tok2pos tok, ("Parse failure near " ++ show code ++ " token"))]
 err [] = [Left ((Pos (-1) (-1) (-1) (-1)), "Unexpected end of token stream")]
 
 goNode0 :: Map TagHandle Text -> Tok2EvStreamCont
 goNode0 tagmap = goNode
   where
     goNode :: Tok2EvStreamCont
-    goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar mempty rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginSequence } : rest) cont = Right (SequenceStart Nothing Nothing) : goSeq rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart Nothing Nothing) : goMap rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginProperties } : rest) cont = goProp mempty rest (\p rest' -> goNode' p rest' cont)
+    goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar (mempty,untagged) rest (flip goNodeEnd cont)
+    goNode (Y.Token { Y.tCode = Y.BeginSequence } : rest) cont = Right (SequenceStart Nothing untagged) : goSeq rest (flip goNodeEnd cont)
+    goNode (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart Nothing untagged) : goMap rest (flip goNodeEnd cont)
+    goNode (Y.Token { Y.tCode = Y.BeginProperties } : rest) cont = goProp (mempty,untagged) rest (\p rest' -> goNode' p rest' cont)
     goNode (Y.Token { Y.tCode = Y.BeginAlias } :
             Y.Token { Y.tCode = Y.Indicator } :
             Y.Token { Y.tCode = Y.Meta, Y.tText = anchor } :
@@ -209,7 +263,7 @@ goNode0 tagmap = goNode
 
     goTag (anchor,_) (Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
-          cont = cont (anchor,Just $! T.pack "!") rest
+          cont = cont (anchor,mkTag' "!") rest
 
     goTag (anchor,_) (Y.Token { Y.tCode = Y.BeginHandle } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
@@ -220,7 +274,7 @@ goNode0 tagmap = goNode
           cont
             | Just t' <- Map.lookup (T.pack ("!!")) tagmap
               = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
-            | otherwise = cont (anchor,Just $! T.pack ("tag:yaml.org,2002:" ++ tag)) rest
+            | otherwise = cont (anchor,mkTag'' tag) rest
 
     goTag (anchor,_) (Y.Token { Y.tCode = Y.Indicator, Y.tText = "!" } :
                       Y.Token { Y.tCode = Y.Indicator, Y.tText = "<" } :
@@ -249,10 +303,8 @@ goNode0 tagmap = goNode
           cont
             | Just t' <- Map.lookup (T.pack ("!")) tagmap
               = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
-            | otherwise = cont (anchor,Just $! T.pack ('!' : tag)) rest -- unresolved
+            | otherwise = cont (anchor,mkTag' ('!' : tag)) rest -- unresolved
     goTag _ xs _ = err xs
-
-    mkTag = Just . tagUnescape . T.pack
 
     goScalar :: Props -> Tok2EvStreamCont
     goScalar (manchor,tag) toks0 cont = go' "" Plain toks0
@@ -309,7 +361,7 @@ goNode0 tagmap = goNode
     goSeq :: Tok2EvStreamCont
     goSeq (Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right SequenceEnd : cont rest
     goSeq (Y.Token { Y.tCode = Y.BeginNode } : rest) cont = goNode rest (flip goSeq cont)
-    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart Nothing Nothing) : goMap rest (flip goSeq cont)
+    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart Nothing untagged) : goMap rest (flip goSeq cont)
     goSeq (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goSeq rest cont
 --    goSeq xs _cont = error (show xs)
     goSeq xs _cont = err xs
