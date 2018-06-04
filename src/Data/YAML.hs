@@ -52,6 +52,7 @@ module Data.YAML
     , FromYAML(..)
     , Parser
     , parseEither
+    , typeMismatch
 
       -- ** Accessors for YAML 'Mapping's
     , Mapping
@@ -197,9 +198,19 @@ instance Monad Parser where
 parseEither :: Parser a -> Either String a
 parseEither = unP
 
--- helper
-failTypeMismatch :: String -> Node -> Parser a
-failTypeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ got)
+-- | Informative failure helper
+--
+-- This is typically used in fall-through cases of 'parseYAML' like so
+--
+-- > instance FromYAML ... where
+-- >   parseYAML ...  = ...
+-- >   parseYAML node = typeMismatch "SomeThing" node
+--
+-- @since 0.1.1.0
+typeMismatch :: String   -- ^ descriptive name of expected data
+             -> Node     -- ^ actual node
+             -> Parser a
+typeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ got)
   where
     got = case node of
             Scalar (SBool _)             -> "!!bool"
@@ -225,7 +236,7 @@ class FromYAML a where
 -- | Operate on @tag:yaml.org,2002:null@ node (or fail)
 withNull :: String -> Parser a -> Node -> Parser a
 withNull _        f (Scalar SNull) = f
-withNull expected _ v              = failTypeMismatch expected v
+withNull expected _ v              = typeMismatch expected v
 
 
 -- | Trivial instance
@@ -238,7 +249,7 @@ instance FromYAML Bool where
 -- | Operate on @tag:yaml.org,2002:bool@ node (or fail)
 withBool :: String -> (Bool -> Parser a) -> Node -> Parser a
 withBool _        f (Scalar (SBool b)) = f b
-withBool expected _ v                  = failTypeMismatch expected v
+withBool expected _ v                  = typeMismatch expected v
 
 instance FromYAML Text where
   parseYAML = withStr "!!str" pure
@@ -246,7 +257,7 @@ instance FromYAML Text where
 -- | Operate on @tag:yaml.org,2002:str@ node (or fail)
 withStr :: String -> (Text -> Parser a) -> Node -> Parser a
 withStr _        f (Scalar (SStr b)) = f b
-withStr expected _ v                 = failTypeMismatch expected v
+withStr expected _ v                 = typeMismatch expected v
 
 instance FromYAML Integer where
   parseYAML = withInt "!!int" pure
@@ -254,7 +265,7 @@ instance FromYAML Integer where
 -- | Operate on @tag:yaml.org,2002:int@ node (or fail)
 withInt :: String -> (Integer -> Parser a) -> Node -> Parser a
 withInt _        f (Scalar (SInt b)) = f b
-withInt expected _ v                 = failTypeMismatch expected v
+withInt expected _ v                 = typeMismatch expected v
 
 instance FromYAML Double where
   parseYAML = withFloat "!!float" pure
@@ -262,50 +273,50 @@ instance FromYAML Double where
 -- | Operate on @tag:yaml.org,2002:float@ node (or fail)
 withFloat :: String -> (Double -> Parser a) -> Node -> Parser a
 withFloat _        f (Scalar (SFloat b)) = f b
-withFloat expected _ v                   = failTypeMismatch expected v
+withFloat expected _ v                   = typeMismatch expected v
 
 -- signed fixed-width integers
 
 instance FromYAML Int where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Int8 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int8'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Int16 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int16'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Int32 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int32'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Int64 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int64'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 
 instance FromYAML Word where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Word8 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word8'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Word16 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word16'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Word32 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word32'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance FromYAML Word64 where
   parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word64'") pure $ fromIntegerMaybe b
-  parseYAML n                    = failTypeMismatch "!!int" n
+  parseYAML n                    = typeMismatch "!!int" n
 
 instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
   parseYAML = withMap "!!map" $ \xs -> Map.fromList <$> mapM (\(a,b) -> (,) <$> parseYAML a <*> parseYAML b) (Map.toList xs)
@@ -314,7 +325,7 @@ instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
 withMap :: String -> (Mapping -> Parser a) -> Node -> Parser a
 withMap _        f (Mapping tag xs)
   | tag == tagMap    = f xs
-withMap expected _ v = failTypeMismatch expected v
+withMap expected _ v = typeMismatch expected v
 
 instance FromYAML v => FromYAML [v] where
   parseYAML = withSeq "!!seq" (mapM parseYAML)
@@ -323,7 +334,7 @@ instance FromYAML v => FromYAML [v] where
 withSeq :: String -> ([Node] -> Parser a) -> Node -> Parser a
 withSeq _        f (Sequence tag xs)
   | tag == tagSeq    = f xs
-withSeq expected _ v = failTypeMismatch expected v
+withSeq expected _ v = typeMismatch expected v
 
 instance FromYAML a => FromYAML (Maybe a) where
   parseYAML (Scalar SNull) = pure Nothing
