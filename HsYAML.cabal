@@ -1,9 +1,10 @@
 cabal-version:       1.14
 name:                HsYAML
-version:             0.1.0.0
+version:             0.1.1.0
 
 synopsis:            Pure Haskell YAML 1.2 parser
 homepage:            https://github.com/hvr/HsYAML
+bug-reports:         https://github.com/hvr/HsYAML/issues
 license:             GPL-3
 license-file:        LICENSE
 author:              Herbert Valerio Riedel
