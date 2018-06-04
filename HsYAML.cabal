@@ -24,7 +24,7 @@ description:
    * Event-based API resembling LibYAML's Event-based API ("Data.YAML.Event")
    * Support for constructing custom YAML node graph representation (including support for cyclic YAML data structures)
    * Direct decoding via typeclass-based API similiar to @aeson@ ("Data.YAML")
-   * Support for /Failsafe/, /JSON and /Core/ schemas as defined in the YAML 1.2 specification (including support for user-defined custom schemas)
+   * Support for /Failsafe/, /JSON/ and /Core/ schemas as defined in the YAML 1.2 specification (including support for user-defined custom schemas)
 
 source-repository head
   type: git
