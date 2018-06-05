@@ -6,11 +6,17 @@
 -- Copyright: © Herbert Valerio Riedel 2015-2018
 -- SPDX-License-Identifier: GPL-3.0
 --
--- Document oriented YAML parsing API inspired by [aeson](http://hackage.haskell.org/package/aeson).
+-- Document oriented [YAML](http://yaml.org/spec/1.2/spec.html) parsing API inspired by [aeson](http://hackage.haskell.org/package/aeson).
 --
--- === Usage Example
+-- === Overview
 --
--- Let's assume we want to decode a simple YAML document
+-- The diagram below depicts the standard layers of a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) processor. This module covers the upper /Native/ and /Representation/ layers, whereas the "Data.YAML.Event" and "Data.YAML.Token" modules provide access to the lower /Serialization/ and /Presentation/ layers respectively.
+--
+-- <<http://yaml.org/spec/1.2/overview2.png>>
+--
+-- === Quick Start Tutorial
+--
+-- Let's assume we want to decode (i.e. /load/) a simple YAML document
 --
 -- > - name: Erik Weisz
 -- >   age: 52
@@ -18,7 +24,7 @@
 -- > - name: Mina Crandon
 -- >   age: 53
 --
--- into a Haskell list of person records, i.e. a value of type @[Person]@.
+-- into a native Haskell data structure of type @[Person]@, i.e. a list of 'Person' records.
 --
 -- The code below shows how to manually define a @Person@ record type together with a 'FromYAML' instance:
 --
