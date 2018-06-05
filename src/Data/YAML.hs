@@ -87,6 +87,7 @@ module Data.YAML
 
     ) where
 
+import qualified Control.Monad.Fail   as Fail
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map             as Map
 import qualified Data.Text            as T
@@ -190,7 +191,23 @@ instance Monad Parser where
   return = pure
   P m >>= k = P (m >>= unP . k)
   (>>) = (*>)
+  fail = Fail.fail
+
+-- | @since 0.1.1.0
+instance Fail.MonadFail Parser where
   fail = P . Left
+
+-- | @since 0.1.1.0
+instance Alternative Parser where
+  empty = fail "empty"
+
+  P (Left _) <|> y = y
+  x          <|> _ = x
+
+-- | @since 0.1.1.0
+instance MonadPlus Parser where
+  mzero = empty
+  mplus = (<|>)
 
 -- | Run 'Parser'
 --

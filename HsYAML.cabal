@@ -67,6 +67,9 @@ library
                      , mtl          >=2.2.1 && <2.3
                      , parsec       >=3.1.13.0 && < 3.2
 
+  if !impl(ghc >= 8.0)
+    build-depends:     fail         >=4.9.0.0 && <4.10
+
   ghc-options:         -Wall
 
 executable yaml-test
