@@ -27,6 +27,9 @@ description:
    * Direct decoding via typeclass-based API similiar to @aeson@ ("Data.YAML")
    * Support for /Failsafe/, /JSON/ and /Core/ schemas as defined in the YAML 1.2 specification (including support for user-defined custom schemas)
 
+extra-source-files:
+  ChangeLog.md
+
 source-repository head
   type: git
   location: https://github.com/hvr/HsYAML.git
