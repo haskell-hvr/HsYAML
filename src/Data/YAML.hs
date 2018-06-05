@@ -49,6 +49,7 @@ module Data.YAML
     (
       -- * Typeclass-based resolving/decoding
       decode
+    , decodeStrict
     , FromYAML(..)
     , Parser
     , parseEither
@@ -88,6 +89,7 @@ module Data.YAML
     ) where
 
 import qualified Control.Monad.Fail   as Fail
+import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map             as Map
 import qualified Data.Text            as T
@@ -423,3 +425,8 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 decode :: FromYAML v => BS.L.ByteString -> Either String [v]
 decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
+-- | Like 'decode' but takes a strict 'BS.ByteString'
+--
+-- @since 0.1.1.0
+decodeStrict :: FromYAML v => BS.ByteString -> Either String [v]
+decodeStrict = decode . BS.L.fromChunks . (:[])
