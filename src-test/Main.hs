@@ -159,6 +159,23 @@ cmdYaml2Json = do
 unescapeSpcTab :: T.Text -> T.Text
 unescapeSpcTab = T.replace "<SPC>" " " . T.replace "<TAB>" "\t"
 
+
+data TestPass = PassExpErr   -- ^ expected parse fail
+              | PassEvs      -- ^ events ok
+              | PassEvsJson  -- ^ events+json ok
+              deriving (Eq,Ord,Show)
+
+data TestFail = FailParse    -- ^ unexpected parse fail
+              | FailSuccess  -- ^ unexpected parse success
+              | FailEvs      -- ^ events wrong/mismatched
+              | FailJson     -- ^ JSON wrong/mismatched
+              deriving (Eq,Ord,Show)
+
+data TestRes
+  = Pass !TestPass
+  | Fail !TestFail
+  deriving (Eq,Ord,Show)
+
 cmdRunTml :: [FilePath] -> IO ()
 cmdRunTml args = do
   results <- forM args $ \fn -> do
@@ -185,7 +202,7 @@ cmdRunTml args = do
         Left err
           | isErr -> do
               putStrLn "OK! (error)"
-              pure True
+              pure (Pass PassExpErr)
           | otherwise -> do
               putStrLn "FAIL!"
               putStrLn ""
@@ -204,7 +221,7 @@ cmdRunTml args = do
               putStrLn ""
               putStrLn "----------------------------------------------------------------------------"
               putStrLn ""
-              pure False
+              pure (Fail FailParse)
 
         Right evs' -> do
           let evs'' = map ev2str evs'
@@ -214,21 +231,21 @@ cmdRunTml args = do
                case mInJsonDat of
                  Nothing -> do
                    putStrLn "OK!"
-                   pure True
+                   pure (Pass PassEvs)
                  Just inJsonDat -> do
                    iutJson <- either fail pure $ decodeAeson inYamlDat
 
                    if iutJson == inJsonDat
                      then do
                        putStrLn "OK! (+JSON)"
-                       pure True
+                       pure (Pass PassEvsJson)
                      else do
                        putStrLn "FAIL! (bad JSON)"
 
                        putStrLn' ("ref = " ++ show inJsonDat)
                        putStrLn' ("iut = " ++ show iutJson)
 
-                       pure False
+                       pure (Fail FailJson)
 
              else do
                if isErr
@@ -250,15 +267,23 @@ cmdRunTml args = do
                putStrLn ""
                putStrLn "----------------------------------------------------------------------------"
                putStrLn ""
-               pure False
+               pure (Fail (if isErr then FailSuccess else FailEvs))
 
   putStrLn ""
 
-  let ok = length (filter id results')
-      nok = length (filter not results')
+  let ok = length [ () | Pass _ <- results' ]
+      nok = length [ () | Fail _ <- results' ]
+
+      stat j = show $ Map.findWithDefault 0 j $ Map.fromListWith (+) [ (k,1::Int) | k <- results' ]
+
       results' = concat results
 
-  putStrLn ("done (passed: " ++ show ok ++ " / failed: " ++ show nok ++ ")")
+  putStrLn $ concat
+    [ "done -- passed: ", show ok
+    , " (ev: ", stat (Pass PassEvs), ", ev+json: ", stat (Pass PassEvsJson), ", err: ", stat (Pass PassExpErr), ") / "
+    , "failed: ", show nok
+    , " (err: ", stat (Fail FailParse), ", ev:", stat (Fail FailEvs), ", json:", stat (Fail FailJson), ", ok:", stat (Fail FailSuccess), ")"
+    ]
 
 
 -- | Incomplete proof-of-concept 'testml-compiler' operation
