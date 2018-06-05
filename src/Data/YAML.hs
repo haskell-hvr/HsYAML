@@ -1,7 +1,6 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE Trustworthy                #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE Safe              #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -186,9 +185,22 @@ decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
 --
 -- See also 'parseEither' or 'decode'
 newtype Parser a = P { unP :: Either String a }
-                 deriving (Functor,Applicative)
 
--- TODO: MonadFail
+instance Functor Parser where
+  fmap f (P x) = P (fmap f x)
+
+  x <$ P (Right _) = P (Right x)
+  _ <$ P (Left e)  = P (Left e)
+
+instance Applicative Parser where
+  pure = P . Right
+
+  P (Left e)  <*> _   = P (Left e)
+  P (Right f) <*> P r = P (fmap f r)
+
+  P (Left e)   *> _   = P (Left e)
+  P (Right _)  *> p   = p
+
 instance Monad Parser where
   return = pure
   P m >>= k = P (m >>= unP . k)
