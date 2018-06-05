@@ -284,6 +284,29 @@ withInt :: String -> (Integer -> Parser a) -> Node -> Parser a
 withInt _        f (Scalar (SInt b)) = f b
 withInt expected _ v                 = typeMismatch expected v
 
+-- | @since 0.1.0.0
+instance FromYAML Natural where
+  parseYAML = withInt "!!int" $ \b -> if b < 0 then fail ("!!int " ++ show b ++ " out of range for 'Natural'")
+                                               else pure (fromInteger b)
+
+-- helper for fixed-width integers
+{-# INLINE parseInt #-}
+parseInt :: (Integral a, Bounded a) => [Char] -> Node -> Parser a
+parseInt name = withInt "!!int" $ \b -> maybe (fail $ "!!int " ++ show b ++ " out of range for '" ++ name ++ "'") pure $
+                                        fromIntegerMaybe b
+
+instance FromYAML Int    where parseYAML = parseInt "Int"
+instance FromYAML Int8   where parseYAML = parseInt "Int8"
+instance FromYAML Int16  where parseYAML = parseInt "Int16"
+instance FromYAML Int32  where parseYAML = parseInt "Int32"
+instance FromYAML Int64  where parseYAML = parseInt "Int64"
+instance FromYAML Word   where parseYAML = parseInt "Word"
+instance FromYAML Word8  where parseYAML = parseInt "Word8"
+instance FromYAML Word16 where parseYAML = parseInt "Word16"
+instance FromYAML Word32 where parseYAML = parseInt "Word32"
+instance FromYAML Word64 where parseYAML = parseInt "Word64"
+
+
 instance FromYAML Double where
   parseYAML = withFloat "!!float" pure
 
@@ -292,48 +315,6 @@ withFloat :: String -> (Double -> Parser a) -> Node -> Parser a
 withFloat _        f (Scalar (SFloat b)) = f b
 withFloat expected _ v                   = typeMismatch expected v
 
--- signed fixed-width integers
-
-instance FromYAML Int where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Int8 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int8'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Int16 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int16'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Int32 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int32'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Int64 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Int64'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-
-instance FromYAML Word where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Word8 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word8'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Word16 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word16'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Word32 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word32'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
-
-instance FromYAML Word64 where
-  parseYAML (Scalar (SInt b)) = maybe (fail $ "!!int " ++ show b ++ " out of range for 'Word64'") pure $ fromIntegerMaybe b
-  parseYAML n                    = typeMismatch "!!int" n
 
 instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
   parseYAML = withMap "!!map" $ \xs -> Map.fromList <$> mapM (\(a,b) -> (,) <$> parseYAML a <*> parseYAML b) (Map.toList xs)

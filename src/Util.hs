@@ -21,6 +21,7 @@ import           Control.Applicative          as X
 import           Control.Monad                as X
 import           Data.Int                     as X
 import           Data.Word                    as X
+import           Numeric.Natural              as X (Natural)
 
 import           Control.Monad.Except
 import           Control.Monad.Identity       as X
