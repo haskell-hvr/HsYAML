@@ -2,7 +2,7 @@
 
 * `Data.YAML` module promoted from `TrustWorthy` to `Safe`
 * Add `FromYAML Natural` instance
-* Add `Alternative` and `MonadPlus` instances for `Data.YAML.Parser`
+* Add `MonadFail`, `Alternative`, and `MonadPlus` instances for `Data.YAML.Parser`
 * Add `Data.YAML.decodeStrict` function
 * Export `Data.YAML.typeMismatch` helper function
 
