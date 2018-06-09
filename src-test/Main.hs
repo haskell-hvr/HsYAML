@@ -124,7 +124,9 @@ instance FromYAML Value' where
           NumberD' t -> pure (T.pack (show t))
           String' t  -> pure t
           Null'      -> pure ""
-          _          -> fail ("dictionary entry had non-string key " ++ show k)
+          -- we stringify the key with an added risk of nameclashing
+          _          -> pure $ T.decodeUtf8 $ J.encodeStrict $ toProperValue k
+--        _          -> fail ("dictionary entry had non-string key " ++ show k)
 
 decodeAeson :: BS.L.ByteString -> Either String [J.Value]
 decodeAeson = fmap (map toProperValue) . decode
