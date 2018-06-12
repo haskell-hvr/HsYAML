@@ -330,14 +330,7 @@ goNode0 tagmap = goNode
                      Y.Token { Y.tCode = Y.Meta, Y.tText = t } :
                      Y.Token { Y.tCode = Y.EndEscape } :
                      rest)
-          | t == "n"  = go'  (acc ++ "\n") sty rest
-          | t == "r"  = go'  (acc ++ "\r") sty rest
-          | t == "t"  = go'  (acc ++ "\t") sty rest
-          | t == "b"  = go'  (acc ++ "\b") sty rest
-          | t == "/"  = go'  (acc ++ t) sty rest
-          | t == " "  = go'  (acc ++ t) sty rest
-          | t == "\\"  = go'  (acc ++ t) sty rest
-          | t == "\"" = go'  (acc ++ t) sty rest
+          | Just t' <- unescape t = go'  (acc ++ t') sty rest
 
         go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
                      Y.Token { Y.tCode = Y.Indicator, Y.tText = "\\" } :
@@ -345,6 +338,7 @@ goNode0 tagmap = goNode
                      Y.Token { Y.tCode = Y.Meta, Y.tText = ucode } :
                      Y.Token { Y.tCode = Y.EndEscape } :
                      rest)
+          | pfx == "U", Just c <- decodeCP2 ucode = go' (acc ++ [c]) sty rest
           | pfx == "u", Just c <- decodeCP ucode = go' (acc ++ [c]) sty rest
           | pfx == "x", Just c <- decodeL1 ucode = go' (acc ++ [c]) sty rest
 
@@ -400,6 +394,13 @@ type Tok2EvStreamCont = [Y.Token] -> Cont EvStream [Y.Token]
 type Cont r a = (a -> r) -> r
 
 
+-- decode 8-hex-digit unicode code-point
+decodeCP2 :: String -> Maybe Char
+decodeCP2 s = case s of
+               [_,_,_,_,_,_,_,_] | all isHexDigit s
+                                 , [(j, "")] <- readHex s -> Just (chr (fromInteger j))
+               _ -> Nothing
+
 -- decode 4-hex-digit unicode code-point
 decodeCP :: String -> Maybe Char
 decodeCP s = case s of
@@ -413,3 +414,33 @@ decodeL1 s = case s of
                [_,_] | all isHexDigit s
                      , [(j, "")] <- readHex s -> Just (chr (fromInteger j))
                _ -> Nothing
+
+-- decode C-style escapes
+unescape :: String -> Maybe String
+unescape [c] = Map.lookup c m
+  where
+    m = Map.fromList [ (k,[v]) | (k,v) <- escapes ]
+
+    escapes :: [(Char,Char)]
+    escapes =
+      [ ('0',   '\0')
+      , ('a',   '\x7')
+      , ('b',   '\x8')
+      , ('\x9', '\x9')
+      , ('t',   '\x9')
+      , ('n',   '\xa')
+      , ('v',   '\xb')
+      , ('f',   '\xc')
+      , ('r',   '\xd')
+      , ('e',   '\x1b')
+      , (' ',   ' ')
+      , ('"',   '"')
+      , ('/',   '/')
+      , ('\\',  '\\')
+      , ('N',   '\x85')
+      , ('_',   '\xa0')
+      , ('L',   '\x2028')
+      , ('P',   '\x2029')
+      ]
+unescape _ = Nothing
+
