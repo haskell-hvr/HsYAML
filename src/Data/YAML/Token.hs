@@ -1759,8 +1759,11 @@ c_b_block_header n {- 162 -} = "header"
 
 -- 8.1.1.1 Block Indentation Indicator
 
-c_indentation_indicator n {- 163 -} = indicator ( ns_dec_digit - '0' ) & asInteger
+c_indentation_indicator n {- 163 -} = fmap fixup (indicator ( ns_dec_digit - '0' ) & asInteger)
                                     / detect_scalar_indentation n
+  where
+    fixup | n == -1   = (.+ 1) -- compensate for anomaly at left-most n
+          | otherwise = id
 
 detect_scalar_indentation n = peek $ ( nb_char *)
                                    & ( b_non_content & ( l_empty n BlockIn *) ?)
