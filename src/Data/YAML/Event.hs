@@ -167,7 +167,7 @@ getUriTag toks0 = do
 
 -- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) (Y.tokenize bs0 False))
+parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) $ eatBom $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -175,6 +175,9 @@ parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (
       | otherwise = skipPast tc ts
     skipPast _ [] = error "the impossible happened"
 
+    eatBom :: [Y.Token] -> [Y.Token]
+    eatBom (Y.Token { Y.tCode = Y.Bom } : ts) = ts
+    eatBom ts                                 = ts
 
     isWhite :: Y.Token -> Bool
     isWhite (Y.Token { Y.tCode = Y.White })  = True
