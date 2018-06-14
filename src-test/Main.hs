@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2018
@@ -11,12 +12,14 @@ import           Control.Monad.Identity
 import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as BS.L
 import           Data.Int                   (Int64)
+import           Data.List                  (groupBy)
 import           Data.Maybe
 import           System.Directory
 import           System.Environment
 import           System.Exit
 import           System.FilePath
 import           System.IO
+import           Text.Printf                (printf)
 import           Text.Read
 
 import qualified Data.Aeson.Micro           as J
@@ -44,6 +47,12 @@ main = do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
 
+    ("yaml2token":args')
+      | null args' -> cmdYaml2Token
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2token sub-command"
+          exitFailure
+
     ("yaml2json":args')
       | null args' -> cmdYaml2Json
       | otherwise -> do
@@ -66,6 +75,19 @@ main = do
 
       exitFailure
 
+
+
+cmdYaml2Token :: IO ()
+cmdYaml2Token = do
+  inYamlDat <- BS.L.getContents
+  forM_ (groupBy (\x y -> YT.tLine x == YT.tLine y) $  YT.tokenize inYamlDat False) $ \lgrp -> do
+    forM_  lgrp $ \YT.Token{..} -> do
+      let tText' | null tText = ""
+                 | any (== ' ') tText = replicate tLineChar ' ' ++ show tText
+                 | otherwise  = replicate (tLineChar+1) ' ' ++ tail (init (show tText))
+      hPutStrLn stdout $ printf "<stdin>:%d:%d: %-15s| %s" tLine tLineChar (show tCode) tText'
+    hPutStrLn stdout ""
+  hFlush stdout
 
 cmdYaml2Event :: IO ()
 cmdYaml2Event = do
