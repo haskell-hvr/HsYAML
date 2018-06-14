@@ -1954,8 +1954,9 @@ l_directives_document {- 209 -} = ( l_directive +)
 
 l_any_document   {- 210 -} = wrapTokens BeginDocument EndDocument
                            $ "doc" ^ ( l_directives_document
+                                     / l_bare_document
                                      / l_explicit_document
-                                     / l_bare_document ) `recovery` unparsed 0
+                                     ) `recovery` unparsed 0
 
 l_yaml_stream {- 211 -} = ( nonEmpty l_document_prefix *)
                         & ( eof / ( c_document_end & ( b_char / s_white / eof ) >?) / l_any_document )
