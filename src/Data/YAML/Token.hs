@@ -1766,7 +1766,9 @@ c_indentation_indicator n {- 163 -} = fmap fixup (indicator ( ns_dec_digit - '0'
           | otherwise = id
 
 detect_scalar_indentation n = peek $ ( nb_char *)
-                                   & ( b_non_content & ( l_empty n BlockIn *) ?)
+                              -- originally:
+                              --   & ( b_non_content & ( l_empty n BlockIn *) ?)
+                                   & ( b_break & ( (s_space *) & b_break *) ?)
                                    & count_spaces (-n)
 
 count_spaces n  = (s_space & count_spaces (n .+ 1))
