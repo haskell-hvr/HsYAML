@@ -310,50 +310,83 @@ goNode0 tagmap = goNode
     goTag _ xs _ = err xs
 
     goScalar :: Props -> Tok2EvStreamCont
-    goScalar (manchor,tag) toks0 cont = go' "" Plain toks0
+    goScalar (manchor,tag) toks0 cont = go0 False Plain toks0
       where
-        go' acc sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest) = go'  (acc ++ t) sty rest
-        go' acc sty (Y.Token { Y.tCode = Y.LineFold } : rest) = go'  (acc ++ " ") sty rest
-        go' acc sty (Y.Token { Y.tCode = Y.LineFeed } : rest) = go'  (acc ++ "\n") sty rest
+        go0 ii sty (Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest)
+          | "'"  <- ind = go' ii "" SingleQuoted rest
+          | "\"" <- ind = go' ii "" DoubleQuoted rest
+          | "|"  <- ind = go0 True Literal rest
+          | ">"  <- ind = go0 True Folded rest
 
-        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+          | "+"  <- ind = go0 ii sty rest
+          | "-"  <- ind = go0 ii sty rest
+          | [c]  <- ind, '1' <= c, c <= '9' = go0 False sty rest
+
+        go0 ii sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest)      = go' ii t sty rest
+        go0 ii sty (Y.Token { Y.tCode = Y.LineFold } : rest)               = go' ii " " sty rest
+        go0 ii sty (Y.Token { Y.tCode = Y.LineFeed } : rest)               = go' ii "\n" sty rest
+        go0 _  sty (Y.Token { Y.tCode = Y.EndScalar } : rest)              = Right (Scalar manchor tag sty mempty) : cont rest
+
+        go0 _ _ xs = err xs
+
+        ----------------------------------------------------------------------------
+
+        go' ii acc sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest) = go' ii (acc ++ t) sty rest
+        go' ii acc sty (Y.Token { Y.tCode = Y.LineFold } : rest) = go' ii (acc ++ " ") sty rest
+        go' ii acc sty (Y.Token { Y.tCode = Y.LineFeed } : rest) = go' ii (acc ++ "\n") sty rest
+
+        go' ii acc sty@SingleQuoted
+                    (Y.Token { Y.tCode = Y.BeginEscape } :
                      Y.Token { Y.tCode = Y.Indicator, Y.tText = "'" } :
                      Y.Token { Y.tCode = Y.Meta, Y.tText = "'" } :
                      Y.Token { Y.tCode = Y.EndEscape } :
-                     rest) = go'  (acc ++ "'") sty rest
+                     rest) = go' ii (acc ++ "'") sty rest
 
-        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+        go' ii acc sty@SingleQuoted
+                    (Y.Token { Y.tCode = Y.Indicator, Y.tText = "'" } :
+                     rest) = go' ii acc sty rest
+
+        go' ii acc sty@DoubleQuoted
+                    (Y.Token { Y.tCode = Y.BeginEscape } :
                      Y.Token { Y.tCode = Y.Indicator, Y.tText = "\\" } :
 --                     Y.Token { Y.tCode = Y.Break } :
                      Y.Token { Y.tCode = Y.EndEscape } :
-                     rest) = go' acc sty rest -- end-line
+                     rest) = go' ii acc sty rest -- line continuation escape
 
-        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+        go' ii acc sty@DoubleQuoted
+                    (Y.Token { Y.tCode = Y.BeginEscape } :
                      Y.Token { Y.tCode = Y.Indicator, Y.tText = "\\" } :
                      Y.Token { Y.tCode = Y.Meta, Y.tText = t } :
                      Y.Token { Y.tCode = Y.EndEscape } :
                      rest)
-          | Just t' <- unescape t = go'  (acc ++ t') sty rest
+          | Just t' <- unescape t = go' ii (acc ++ t') sty rest
 
-        go' acc sty (Y.Token { Y.tCode = Y.BeginEscape } :
+        go' ii acc sty@DoubleQuoted
+                    (Y.Token { Y.tCode = Y.BeginEscape } :
                      Y.Token { Y.tCode = Y.Indicator, Y.tText = "\\" } :
                      Y.Token { Y.tCode = Y.Indicator, Y.tText = pfx } :
                      Y.Token { Y.tCode = Y.Meta, Y.tText = ucode } :
                      Y.Token { Y.tCode = Y.EndEscape } :
                      rest)
-          | pfx == "U", Just c <- decodeCP2 ucode = go' (acc ++ [c]) sty rest
-          | pfx == "u", Just c <- decodeCP ucode = go' (acc ++ [c]) sty rest
-          | pfx == "x", Just c <- decodeL1 ucode = go' (acc ++ [c]) sty rest
+          | pfx == "U", Just c <- decodeCP2 ucode = go' ii (acc ++ [c]) sty rest
+          | pfx == "u", Just c <- decodeCP  ucode = go' ii (acc ++ [c]) sty rest
+          | pfx == "x", Just c <- decodeL1  ucode = go' ii (acc ++ [c]) sty rest
 
-        go' acc sty (Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest)
-          | "'"  <- ind = go' acc SingleQuoted rest
-          | "\"" <- ind = go' acc DoubleQuoted rest
-          | "|"  <- ind = go' acc Literal rest
-          | ">"  <- ind = go' acc Folded rest
-          | otherwise   = go' acc sty rest
-        go' acc sty (Y.Token { Y.tCode = Y.EndScalar } : rest) = Right (Scalar manchor tag sty (T.pack acc)) : cont rest
-        go' _ _ xs | False = error (show xs)
-        go' _ _ xs = err xs
+        go' ii acc sty@DoubleQuoted
+                    (Y.Token { Y.tCode = Y.Indicator, Y.tText = "\"" } :
+                     rest) = go' ii acc sty rest
+
+        go' ii acc sty (t@Y.Token { Y.tCode = Y.EndScalar } :
+                     rest)
+          | ii, hasLeadingSpace acc = [Left (tok2pos t, "leading empty lines contain more spaces than the first non-empty line in scalar")]
+          | otherwise = Right (Scalar manchor tag sty (T.pack acc)) : cont rest
+
+        go' _ _ _ xs | False = error (show xs)
+        go' _ _ _ xs = err xs
+
+        hasLeadingSpace (' ':_)   = True
+        hasLeadingSpace ('\n':cs) = hasLeadingSpace cs
+        hasLeadingSpace _         = False
 
     goSeq :: Tok2EvStreamCont
     goSeq (Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right SequenceEnd : cont rest
