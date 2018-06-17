@@ -1941,7 +1941,7 @@ l_bare_document {- 207 -} = "node" ^ s_l__block_node (-1) BlockIn
 
 -- 9.1.4 Explicit Documents
 
-l_explicit_document {- 208 -} = c_directives_end ! "doc"
+l_explicit_document {- 208 -} = ( c_directives_end & ( b_char / s_white / eof >?)) ! "doc"
                               & ( ( l_bare_document
                                   / e_node & ( s_l_comments ?) & unparsed 0 ) `recovery` unparsed 0 )
 
