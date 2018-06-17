@@ -72,8 +72,13 @@ undoEncoding encoding bytes =
     UTF8    -> undoUTF8 bytes 0
     UTF16LE -> combinePairs $ undoUTF16LE bytes 0
     UTF16BE -> combinePairs $ undoUTF16BE bytes 0
-    UTF32LE -> combinePairs $ undoUTF32LE bytes 0
-    UTF32BE -> combinePairs $ undoUTF32BE bytes 0
+    UTF32LE -> validateScalars $ undoUTF32LE bytes 0
+    UTF32BE -> validateScalars $ undoUTF32BE bytes 0
+  where
+    validateScalars [] = []
+    validateScalars (x@(_,c):rest)
+      | '\xD800' <= c, c <= '\xDFFF' = error "UTF-32 stream contains invalid surrogate code-point"
+      | otherwise                    = x : validateScalars rest
 
 -- ** UTF-32 decoding
 
