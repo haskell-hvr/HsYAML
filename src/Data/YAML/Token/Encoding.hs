@@ -19,11 +19,11 @@ module Data.YAML.Token.Encoding
   , Encoding(..)
   ) where
 
+import qualified Data.ByteString.Lazy       as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Char                  (chr, ord)
 
--- import           Util                       hiding (empty)
-
+import           Util
 
 -- | Recognized Unicode encodings. As of YAML 1.2 UTF-32 is also required.
 data Encoding = UTF8    -- ^ UTF-8 encoding (or ASCII)
@@ -182,82 +182,71 @@ undoUTF16BE bytes offset
 
 -- | @undoUTF8 bytes offset@ decoded a UTF-8 /bytes/ stream to Unicode chars.
 undoUTF8 :: BLC.ByteString -> Int -> [(Int, Char)]
-undoUTF8 bytes !offset
-  | BLC.null bytes = []
-  | otherwise = let first = BLC.head bytes
-                    rest  = BLC.tail bytes
-                in case () of
-                      _ | first < '\x80' -> (offset + 1, first):(undoUTF8 rest $ offset + 1)
-                        | first < '\xC0' -> error $ "UTF-8 input contains invalid first byte"
-                        | first < '\xE0' -> decodeTwoUTF8 first offset rest
-                        | first < '\xF0' -> decodeThreeUTF8 first offset rest
-                        | first < '\xF8' -> decodeFourUTF8 first offset rest
-                        | otherwise      -> error $ "UTF-8 input contains invalid first byte"
+undoUTF8 bytes offset = undoUTF8' (BL.unpack bytes) offset
+
+w2c :: Word8 -> Char
+w2c = chr . fromIntegral
+
+w2i :: Word8 -> Int
+w2i = fromIntegral
+
+undoUTF8' :: [Word8] -> Int -> [(Int, Char)]
+undoUTF8' [] _ = []
+undoUTF8' (first:rest) !offset
+  | first < 0x80  = (offset', c) : undoUTF8' rest offset'
+  where
+    !offset' = offset + 1
+    !c       = w2c first
+undoUTF8' (first:rest) !offset
+  | first < 0xC0  = error "UTF-8 input contains invalid first byte"
+  | first < 0xE0  = decodeTwoUTF8   first offset rest
+  | first < 0xF0  = decodeThreeUTF8 first offset rest
+  | first < 0xF8  = decodeFourUTF8  first offset rest
+  | otherwise     = error "UTF-8 input contains invalid first byte"
 
 -- | @decodeTwoUTF8 first offset bytes@ decodes a two-byte UTF-8 character,
 -- where the /first/ byte is already available and the second is the head of
 -- the /bytes/, and then continues to undo the UTF-8 encoding.
-decodeTwoUTF8 :: Char -> Int -> BLC.ByteString -> [(Int, Char)]
-decodeTwoUTF8 first offset bytes
-  | BLC.null bytes = error "UTF-8 double byte char is missing second byte at eof"
-  | otherwise = let second = BLC.head bytes
-                    rest   = BLC.tail bytes
-                in case () of
-                      _ | second < '\x80' || '\xBF' < second -> error $ "UTF-8 double byte char has invalid second byte"
-                        | otherwise                          -> (offset + 2, combineTwoUTF8 first second):(undoUTF8 rest $ offset + 2)
-
--- | @combineTwoUTF8 first second@ combines the /first/ and /second/ bytes of a
--- two-byte UTF-8 char into a single Unicode char.
-combineTwoUTF8 :: Char -> Char -> Char
-combineTwoUTF8 first second = chr(((ord first) - 0xC0) * 64
-                               + ((ord second) - 0x80))
+decodeTwoUTF8 :: Word8 -> Int -> [Word8] -> [(Int, Char)]
+decodeTwoUTF8 first offset (second:rest)
+  | second < 0x80 || 0xBF < second = error $ "UTF-8 double byte char has invalid second byte"
+  | otherwise = (offset', c) : undoUTF8' rest offset'
+  where
+    !offset' = offset + 2
+    !c       = chr ((w2i first - 0xc0) * 0x40  + (w2i second - 0x80))
+decodeTwoUTF8 _ _ [] = error "UTF-8 double byte char is missing second byte at eof"
 
 -- | @decodeThreeUTF8 first offset bytes@ decodes a three-byte UTF-8 character,
 -- where the /first/ byte is already available and the second and third are the
 -- head of the /bytes/, and then continues to undo the UTF-8 encoding.
-decodeThreeUTF8 :: Char -> Int -> BLC.ByteString -> [(Int, Char)]
-decodeThreeUTF8 first offset bytes
-  | hasFewerThan 2 bytes = error "UTF-8 triple byte char is missing bytes at eof"
-  | otherwise = let second = BLC.head bytes
-                    bytes' = BLC.tail bytes
-                    third  = BLC.head bytes'
-                    rest   = BLC.tail bytes'
-                in case () of
-                      _ | second < '\x80' || '\xBF' < second -> error "UTF-8 triple byte char has invalid second byte"
-                        | third < '\x80' || '\xBF' < third   -> error "UTF-8 triple byte char has invalid third byte"
-                        | otherwise                          -> (offset + 3, combineThreeUTF8 first second third):(undoUTF8 rest $ offset + 3)
-
--- | @combineThreeUTF8 first second@ combines the /first/, /second/ and /third/
--- bytes of a three-byte UTF-8 char into a single Unicode char.
-combineThreeUTF8 :: Char -> Char -> Char -> Char
-combineThreeUTF8 first second third = chr(((ord first) - 0xE0) * 4096
-                                       + ((ord second) - 0x80) * 64
-                                       + ((ord third)  - 0x80))
+decodeThreeUTF8 :: Word8 -> Int -> [Word8] -> [(Int, Char)]
+decodeThreeUTF8 first offset (second:third:rest)
+  | second < 0x80 || 0xBF < second = error "UTF-8 triple byte char has invalid second byte"
+  | third <  0x80 || 0xBF < third  = error "UTF-8 triple byte char has invalid third byte"
+  | otherwise = (offset', c): undoUTF8' rest offset'
+  where
+    !offset' = offset + 3
+    !c       = chr(((w2i first)  - 0xE0) * 0x1000 +
+                   ((w2i second) - 0x80) * 0x40 +
+                   ((w2i third)  - 0x80))
+decodeThreeUTF8 _ _ _ =error "UTF-8 triple byte char is missing bytes at eof"
 
 -- | @decodeFourUTF8 first offset bytes@ decodes a four-byte UTF-8 character,
 -- where the /first/ byte is already available and the second, third and fourth
 -- are the head of the /bytes/, and then continues to undo the UTF-8 encoding.
-decodeFourUTF8 :: Char -> Int -> BLC.ByteString -> [(Int, Char)]
-decodeFourUTF8 first offset bytes
-  | hasFewerThan 3 bytes = error "UTF-8 quad byte char is missing bytes at eof"
-  | otherwise = let second  = BLC.head bytes
-                    bytes'  = BLC.tail bytes
-                    third   = BLC.head bytes'
-                    bytes'' = BLC.tail bytes'
-                    fourth  = BLC.head bytes''
-                    rest    = BLC.tail bytes''
-                in case () of
-                      _ | second < '\x80' || '\xBF' < second -> error "UTF-8 quad byte char has invalid second byte"
-                        | third < '\x80' || '\xBF' < third   -> error "UTF-8 quad byte char has invalid third byte"
-                        | third < '\x80' || '\xBF' < third   -> error "UTF-8 quad byte char has invalid fourth byte"
-                        | otherwise                          -> (offset + 4, combineFourUTF8 first second third fourth):(undoUTF8 rest $ offset + 4)
+decodeFourUTF8 :: Word8 -> Int -> [Word8] -> [(Int, Char)]
+decodeFourUTF8 first offset (second:third:fourth:rest)
+  | second < 0x80 || 0xBF < second = error "UTF-8 quad byte char has invalid second byte"
+  | third  < 0x80 || 0xBF < third  = error "UTF-8 quad byte char has invalid third byte"
+  | third  < 0x80 || 0xBF < third  = error "UTF-8 quad byte char has invalid fourth byte"
+  | otherwise                      = (offset', c) : undoUTF8' rest offset'
+  where
+    !offset' = offset + 4
+    !c       = chr(((w2i first)  - 0xF0) * 0x40000 +
+                   ((w2i second) - 0x80) * 0x1000 +
+                   ((w2i third)  - 0x80) * 0x40 +
+                   ((w2i fourth) - 0x80))
 
--- | @combineFourUTF8 first second@ combines the /first/, /second/ and /third/
--- bytes of a three-byte UTF-8 char into a single Unicode char.
-combineFourUTF8 :: Char -> Char -> Char -> Char -> Char
-combineFourUTF8 first second third fourth = chr(((ord first)  - 0xF0) * 262144
-                                             + ((ord second) - 0x80) * 4096
-                                             + ((ord third)  - 0x80) * 64
-                                             + ((ord fourth) - 0x80))
+decodeFourUTF8 _ _ _ = error "UTF-8 quad byte char is missing bytes at eof"
 
 
