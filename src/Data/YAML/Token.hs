@@ -1017,9 +1017,9 @@ commitBugs reply =
                                                                tCode       = Error,
                                                                tText       = "Commit to " ++ show commit ++ " was made outside it" }
 
--- | @'tokenize' input emit_unparsed@
--- converts the Unicode /input/ to a
--- list of 'Token' according to the YAML 1.2 specification.
+-- | @'tokenize' input emit_unparsed@ converts the Unicode /input/
+-- (using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encoding)
+-- to a list of 'Token' according to the YAML 1.2 specification.
 --
 -- Errors are reported as tokens with @'Error' :: 'Code'@, and the
 -- unparsed text following an error may be attached as a final 'Unparsed' token

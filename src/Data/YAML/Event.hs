@@ -166,6 +166,10 @@ getUriTag toks0 = do
 -}
 
 -- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
+--
+-- The input 'BS.L.ByteString' is expected to have a YAML 1.2 stream
+-- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
+-- (which will be auto-detected).
 parseEvents :: BS.L.ByteString -> EvStream
 parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) $ eatBom $ Y.tokenize bs0 False)
   where

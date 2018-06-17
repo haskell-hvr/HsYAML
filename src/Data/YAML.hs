@@ -440,6 +440,11 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 -- 'decode' uses the same settings as 'decodeNode' for tag-resolving. If
 -- you need a different custom parsing configuration, you need to
 -- combine 'parseEither' and `decodeNode'` yourself.
+--
+-- The 'decode' as well as the 'decodeNode' functions supports
+-- decoding from YAML streams using the UTF-8, UTF-16 (LE or BE), or
+-- UTF-32 (LE or BE) encoding (which is auto-detected).
+--
 decode :: FromYAML v => BS.L.ByteString -> Either String [v]
 decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
