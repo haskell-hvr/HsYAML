@@ -61,12 +61,14 @@ infixl 7 .*
 
 -- ** Record field access
 --
--- We also define @|>@ for record access for increased readability.
+-- We also define @^.@ for record access for increased readability.
 
-infixl 9 |>
--- | @record |> field@ is the same as @field record@,  but is more readable.
-(|>) :: record -> (record -> value) -> value
-record |> field = field record
+infixl 8 ^.
+-- | @record ^. field@ is the same as @field record@,  but is more readable.
+--
+-- NB: This trivially emulates the @lens@ operator
+(^.) :: record -> (record -> value) -> value
+record ^. field = field record
 
 -- * UTF decoding
 --
@@ -472,10 +474,10 @@ data Reply result = Reply {
 
 -- Showing a 'State' is only used in debugging.
 instance (Show result) => Show (Reply result) where
-  show reply = "Result: "    ++ (show $ reply|>rResult)
-            ++ ", Tokens: "  ++ (show $ D.toList $ reply|>rTokens)
-            ++ ", Commit: "  ++ (show $ reply|>rCommit)
-            ++ ", State: { " ++ (show $ reply|>rState) ++ "}"
+  show reply = "Result: "    ++ (show $ reply^.rResult)
+            ++ ", Tokens: "  ++ (show $ D.toList $ reply^.rTokens)
+            ++ ", Commit: "  ++ (show $ reply^.rCommit)
+            ++ ", State: { " ++ (show $ reply^.rState) ++ "}"
 
 -- A 'Pattern' is a parser that doesn't have an (interesting) result.
 type Pattern = Parser ()
@@ -509,23 +511,23 @@ data State = State {
 -- Showing a 'State' is only used in debugging. Note that forcing dump of
 -- @sInput@ will disable streaming it.
 instance Show State where
-  show state = "Encoding: "          ++ (show $ state|>sEncoding)
-            ++ ", Decision: "        ++ (show $ state|>sDecision)
-            ++ ", Limit: "           ++ (show $ state|>sLimit)
-            ++ ", IsPeek: "          ++ (show $ state|>sIsPeek)
-            ++ ", IsSol: "           ++ (show $ state|>sIsSol)
-            ++ ", Chars: >>>"        ++ (reverse $ state|>sChars) ++ "<<<"
-            ++ ", CharsByteOffset: " ++ (show $ state|>sCharsByteOffset)
-            ++ ", CharsCharOffset: " ++ (show $ state|>sCharsCharOffset)
-            ++ ", CharsLine: "       ++ (show $ state|>sCharsLine)
-            ++ ", CharsLineChar: "   ++ (show $ state|>sCharsLineChar)
-            ++ ", ByteOffset: "      ++ (show $ state|>sByteOffset)
-            ++ ", CharOffset: "      ++ (show $ state|>sCharOffset)
-            ++ ", Line: "            ++ (show $ state|>sLine)
-            ++ ", LineChar: "        ++ (show $ state|>sLineChar)
-            ++ ", Code: "            ++ (show $ state|>sCode)
-            ++ ", Last: "            ++ (show $ state|>sLast)
---          ++ ", Input: >>>"        ++ (show $ state|>sInput) ++ "<<<"
+  show state = "Encoding: "          ++ (show $ state^.sEncoding)
+            ++ ", Decision: "        ++ (show $ state^.sDecision)
+            ++ ", Limit: "           ++ (show $ state^.sLimit)
+            ++ ", IsPeek: "          ++ (show $ state^.sIsPeek)
+            ++ ", IsSol: "           ++ (show $ state^.sIsSol)
+            ++ ", Chars: >>>"        ++ (reverse $ state^.sChars) ++ "<<<"
+            ++ ", CharsByteOffset: " ++ (show $ state^.sCharsByteOffset)
+            ++ ", CharsCharOffset: " ++ (show $ state^.sCharsCharOffset)
+            ++ ", CharsLine: "       ++ (show $ state^.sCharsLine)
+            ++ ", CharsLineChar: "   ++ (show $ state^.sCharsLineChar)
+            ++ ", ByteOffset: "      ++ (show $ state^.sByteOffset)
+            ++ ", CharOffset: "      ++ (show $ state^.sCharOffset)
+            ++ ", Line: "            ++ (show $ state^.sLine)
+            ++ ", LineChar: "        ++ (show $ state^.sLineChar)
+            ++ ", Code: "            ++ (show $ state^.sCode)
+            ++ ", Last: "            ++ (show $ state^.sLast)
+--          ++ ", Input: >>>"        ++ (show $ state^.sInput) ++ "<<<"
 
 -- | @initialState name input@ returns an initial 'State' for parsing the
 -- /input/ (with /name/ for error messages).
@@ -632,7 +634,7 @@ failReply state message = Reply { rResult = Failed message,
 
 -- | @unexpectedReply state@ returns a @failReply@ for an unexpected character.
 unexpectedReply :: State -> Reply result
-unexpectedReply state = case state|>sInput of
+unexpectedReply state = case state^.sInput of
                              ((_, char):_) -> failReply state $ "Unexpected '" ++ [char] ++ "'"
                              []            -> failReply state "Unexpected end of input"
 
@@ -656,7 +658,7 @@ instance Monad Parser where
   left >>= right = bindParser left right
                    where bindParser (Parser left) right = Parser $ \ state ->
                            let reply = left state
-                           in case reply|>rResult of
+                           in case reply^.rResult of
                                    Failed message -> reply { rResult = Failed message }
                                    Result value   -> reply { rResult = More $ right value }
                                    More parser    -> reply { rResult = More $ bindParser parser right }
@@ -785,8 +787,8 @@ decide left right = Parser $ \ state ->
   in parser state
   where decideParser point tokens (Parser left) right = Parser $ \state ->
           let reply = left state
-              tokens' reply = D.append tokens $ reply|>rTokens
-          in case (reply|>rResult, reply|>rCommit) of
+              tokens' reply = D.append tokens $ reply^.rTokens
+          in case (reply^.rResult, reply^.rCommit) of
                   (Failed _,    _)      -> Reply { rState  = point,
                                                    rTokens = D.empty,
                                                    rResult = More right,
@@ -795,25 +797,25 @@ decide left right = Parser $ \ state ->
                   (More left', Just _)  -> reply { rTokens = tokens' reply,
                                                    rResult = More left' }
                   (More left', Nothing) -> let Parser parser = decideParser point (tokens' reply) left' right
-                                           in parser $ reply|>rState
+                                           in parser $ reply^.rState
 
 -- | @choice decision parser@ provides a /decision/ name to the choice about to
 -- be made in /parser/, to allow to @commit@ to it.
 choice :: String -> Parser result -> Parser result
 choice decision parser = Parser $ \ state ->
-  let Parser parser' = choiceParser (state|>sDecision) decision parser
+  let Parser parser' = choiceParser (state^.sDecision) decision parser
   in parser' state { sDecision = decision }
   where choiceParser parentDecision makingDecision (Parser parser) = Parser $ \ state ->
           let reply   = parser state
-              commit' = case reply|>rCommit of
+              commit' = case reply^.rCommit of
                              Nothing                                    -> Nothing
                              Just decision | decision == makingDecision -> Nothing
-                                           | otherwise                  -> reply|>rCommit
-              reply'  = case reply|>rResult of
+                                           | otherwise                  -> reply^.rCommit
+              reply'  = case reply^.rResult of
                              More parser' -> reply { rCommit = commit',
                                                      rResult = More $ choiceParser parentDecision makingDecision parser' }
                              _            -> reply { rCommit = commit',
-                                                     rState = (reply|>rState) { sDecision = parentDecision } }
+                                                     rState = (reply^.rState) { sDecision = parentDecision } }
           in reply'
 
 -- | @parser ``recovery`` pattern@ parses the specified /parser/; if it fails,
@@ -823,9 +825,9 @@ recovery pattern recover =
   Parser $ \ state ->
     let (Parser parser) = match pattern
         reply = parser state
-    in if state|>sIsPeek
+    in if state^.sIsPeek
           then reply
-          else case reply|>rResult of
+          else case reply^.rResult of
                     Result _       -> reply
                     More more      -> reply { rResult = More $ more `recovery` recover }
                     Failed message -> reply { rResult = More $ fake Error message & unparsed & recover }
@@ -836,13 +838,13 @@ recovery pattern recover =
 -- does not consume any input.
 prev :: (Match match result) => match -> Parser result
 prev parser = Parser $ \ state ->
-  prevParser state (match parser) state { sIsPeek = True, sInput = (-1, state|>sLast) : state|>sInput }
+  prevParser state (match parser) state { sIsPeek = True, sInput = (-1, state^.sLast) : state^.sInput }
   where prevParser point (Parser parser) state =
           let reply = parser state
-          in case reply|>rResult of
+          in case reply^.rResult of
                   Failed message -> failReply point message
                   Result value   -> returnReply point value
-                  More parser'   -> prevParser point parser' $ reply|>rState
+                  More parser'   -> prevParser point parser' $ reply^.rState
 
 -- | @peek parser@ succeeds if /parser/ matches at this point, but does not
 -- consume any input.
@@ -851,10 +853,10 @@ peek parser = Parser $ \ state ->
   peekParser state (match parser) state { sIsPeek = True }
   where peekParser point (Parser parser) state =
           let reply = parser state
-          in case reply|>rResult of
+          in case reply^.rResult of
                   Failed message -> failReply point message
                   Result value   -> returnReply point value
-                  More parser'   -> peekParser point parser' $ reply|>rState
+                  More parser'   -> peekParser point parser' $ reply^.rState
 
 -- | @reject parser name@ fails if /parser/ matches at this point, and does
 -- nothing otherwise. If /name/ is provided, it is used in the error message,
@@ -864,12 +866,12 @@ reject parser name = Parser $ \ state ->
   rejectParser state name (match parser) state { sIsPeek = True }
   where rejectParser point name (Parser parser) state =
           let reply = parser state
-          in case reply|>rResult of
+          in case reply^.rResult of
                   Failed _message -> returnReply point ()
                   Result _value   -> case name of
                                          Nothing   -> unexpectedReply point
                                          Just text -> failReply point $ "Unexpected " ++ text
-                  More parser'    -> rejectParser point name parser' $ reply|>rState
+                  More parser'    -> rejectParser point name parser' $ reply^.rState
 
 -- | @upto parser@ consumes all the character up to and not including the next
 -- point where the specified parser is a match.
@@ -881,14 +883,14 @@ upto parser = ( ( parser >!) & nextIf (const True) *)
 -- characters at this point.
 nonEmpty :: (Match match result) => match -> Parser result
 nonEmpty parser = Parser $ \ state ->
-  let Parser parser' = nonEmptyParser (state|>sCharOffset) (match parser)
+  let Parser parser' = nonEmptyParser (state^.sCharOffset) (match parser)
   in parser' state
   where nonEmptyParser offset (Parser parser) = Parser $ \ state ->
           let reply = parser state
-              state' = reply|>rState
-          in case reply|>rResult of
+              state' = reply^.rState
+          in case reply^.rResult of
                   Failed _message -> reply
-                  Result _value   -> if state'|>sCharOffset > offset
+                  Result _value   -> if state'^.sCharOffset > offset
                                        then reply
                                        else failReply state' "Matched empty pattern"
                   More parser'    -> reply { rResult = More $ nonEmptyParser offset parser' }
@@ -900,14 +902,14 @@ empty = return ()
 -- | @eof@ matches the end of the input.
 eof :: Pattern
 eof = Parser $ \ state ->
-  if state|>sInput == []
+  if state^.sInput == []
      then returnReply state ()
      else unexpectedReply state
 
 -- | @sol@ matches the start of a line.
 sol :: Pattern
 sol = Parser $ \ state ->
-  if state|>sIsSol
+  if state^.sIsSol
      then returnReply state ()
      else failReply state "Expected start of line"
 
@@ -927,7 +929,7 @@ commit decision = Parser $ \ state ->
 nextLine :: Pattern
 nextLine = Parser $ \ state ->
   returnReply state { sIsSol    = True,
-                      sLine     = state|>sLine .+ 1,
+                      sLine     = state^.sLine .+ 1,
                       sLineChar = 0 }
               ()
 
@@ -941,9 +943,9 @@ with setField getField value parser = Parser $ \ state ->
   in parser' $ setField value state
   where withParser parentValue (Parser parser) = Parser $ \ state ->
           let reply = parser state
-          in case reply|>rResult of
-                  Failed _     -> reply { rState = setField parentValue $ reply|>rState }
-                  Result _     -> reply { rState = setField parentValue $ reply|>rState }
+          in case reply^.rResult of
+                  Failed _     -> reply { rState = setField parentValue $ reply^.rState }
+                  Result _     -> reply { rState = setField parentValue $ reply^.rState }
                   More parser' -> reply { rResult = More $ withParser parentValue parser' }
 
 -- | @parser ``forbidding`` pattern@ parses the specified /parser/ ensuring
@@ -963,29 +965,29 @@ limitedTo parser limit = with setLimit sLimit limit (match parser)
 -- (and buffers) the next input char if it satisfies /test/.
 nextIf :: (Char -> Bool) -> Pattern
 nextIf test = Parser $ \ state ->
-  case state|>sForbidden of
+  case state^.sForbidden of
        Nothing     -> limitedNextIf state
        Just parser -> let Parser parser' = reject parser $ Just "forbidden pattern"
                           reply = parser' state { sForbidden = Nothing }
-                      in case reply|>rResult of
+                      in case reply^.rResult of
                               Failed _ -> reply
                               Result _ -> limitedNextIf state
   where limitedNextIf state =
-          case state|>sLimit of
+          case state^.sLimit of
                -1     -> consumeNextIf state
                0      -> failReply state "Lookahead limit reached"
-               _limit -> consumeNextIf state { sLimit = state|>sLimit .- 1 }
+               _limit -> consumeNextIf state { sLimit = state^.sLimit .- 1 }
         consumeNextIf state =
-          case state|>sInput of
-               ((offset, char):rest) | test char -> let chars = if state|>sIsPeek
+          case state^.sInput of
+               ((offset, char):rest) | test char -> let chars = if state^.sIsPeek
                                                                    then []
-                                                                   else char:(state|>sChars)
+                                                                   else char:(state^.sChars)
                                                         byte_offset = charsOf sByteOffset sCharsByteOffset
                                                         char_offset = charsOf sCharOffset sCharsCharOffset
                                                         line        = charsOf sLine       sCharsLine
                                                         line_char   = charsOf sLineChar   sCharsLineChar
                                                         is_sol = if char == '\xFEFF'
-                                                                    then state|>sIsSol
+                                                                    then state^.sIsSol
                                                                     else False
                                                         state' = state { sInput           = rest,
                                                                          sLast            = char,
@@ -996,16 +998,16 @@ nextIf test = Parser $ \ state ->
                                                                          sCharsLineChar   = line_char,
                                                                          sIsSol           = is_sol,
                                                                          sByteOffset      = offset,
-                                                                         sCharOffset      = state|>sCharOffset .+ 1,
-                                                                         sLineChar        = state|>sLineChar .+ 1 }
+                                                                         sCharOffset      = state^.sCharOffset .+ 1,
+                                                                         sLineChar        = state^.sLineChar .+ 1 }
                                                     in returnReply state' ()
                            | otherwise -> unexpectedReply state
                []                      -> unexpectedReply state
-          where charsOf field charsField = if state|>sIsPeek
+          where charsOf field charsField = if state^.sIsPeek
                                               then -1
-                                              else if state|>sChars == []
-                                                      then state|>field
-                                                      else state|>charsField
+                                              else if state^.sChars == []
+                                                      then state^.field
+                                                      else state^.charsField
 
 -- ** Producing tokens
 
@@ -1018,15 +1020,15 @@ finishToken = Parser $ \ state ->
                        sCharsCharOffset = -1,
                        sCharsLine       = -1,
                        sCharsLineChar   = -1 }
-  in if state|>sIsPeek
+  in if state^.sIsPeek
         then returnReply state' ()
-        else case state|>sChars of
+        else case state^.sChars of
                   []          -> returnReply state' ()
-                  chars@(_:_) -> tokenReply state' Token { tByteOffset = state|>sCharsByteOffset,
-                                                           tCharOffset = state|>sCharsCharOffset,
-                                                           tLine       = state|>sCharsLine,
-                                                           tLineChar   = state|>sCharsLineChar,
-                                                           tCode       = state|>sCode,
+                  chars@(_:_) -> tokenReply state' Token { tByteOffset = state^.sCharsByteOffset,
+                                                           tCharOffset = state^.sCharsCharOffset,
+                                                           tLine       = state^.sCharsLine,
+                                                           tLineChar   = state^.sCharsLineChar,
+                                                           tCode       = state^.sCode,
                                                            tText       = reverse chars }
 
 -- | @wrap parser@ invokes the /parser/, ensures any unclaimed input characters
@@ -1048,7 +1050,7 @@ token code parser = finishToken & with setCode sCode code (parser & finishToken)
 -- /text/ characters, instead of whatever characters are collected so far.
 fake :: Code -> String -> Pattern
 fake code text = Parser $ \ state ->
-  if state|>sIsPeek
+  if state^.sIsPeek
      then returnReply state ()
      else tokenReply state Token { tByteOffset = value state sByteOffset sCharsByteOffset,
                                    tCharOffset = value state sCharOffset sCharsCharOffset,
@@ -1080,12 +1082,12 @@ text parser = token Text parser
 emptyToken :: Code -> Pattern
 emptyToken code = finishToken & parser code
   where parser code = Parser $ \ state ->
-          if state|>sIsPeek
+          if state^.sIsPeek
              then returnReply state ()
-             else tokenReply state Token { tByteOffset = state|>sByteOffset,
-                                           tCharOffset = state|>sCharOffset,
-                                           tLine       = state|>sLine,
-                                           tLineChar   = state|>sLineChar,
+             else tokenReply state Token { tByteOffset = state^.sByteOffset,
+                                           tCharOffset = state^.sCharOffset,
+                                           tLine       = state^.sLine,
+                                           tLineChar   = state^.sLineChar,
                                            tCode       = code,
                                            tText       = "" }
 
@@ -1103,7 +1105,7 @@ prefixErrorWith pattern prefix =
   Parser $ \ state ->
     let (Parser parser) = match pattern
         reply = parser state
-    in case reply|>rResult of
+    in case reply^.rResult of
             Result _       -> reply
             More more      -> reply { rResult = More $ prefixErrorWith more prefix }
             Failed message -> reply { rResult = More $ prefix & (fail message :: Parser result) }
@@ -1183,8 +1185,8 @@ patternTokenizer pattern input withFollowing =
   where patternParser (Parser parser) state =
           let reply = parser state
               tokens = commitBugs reply
-              state' = reply|>rState
-          in case reply|>rResult of
+              state' = reply^.rState
+          in case reply^.rResult of
                   Failed message -> errorTokens tokens state' message withFollowing
                   Result _       -> tokens
                   More parser'   -> D.append tokens $ patternParser parser' state'
@@ -1195,33 +1197,33 @@ patternTokenizer pattern input withFollowing =
 -- token.
 errorTokens :: D.DList Token -> State -> String -> Bool -> D.DList Token
 errorTokens tokens state message withFollowing =
-    let tokens' = D.append tokens $ D.singleton Token { tByteOffset = state|>sByteOffset,
-                                                        tCharOffset = state|>sCharOffset,
-                                                        tLine       = state|>sLine,
-                                                        tLineChar   = state|>sLineChar,
+    let tokens' = D.append tokens $ D.singleton Token { tByteOffset = state^.sByteOffset,
+                                                        tCharOffset = state^.sCharOffset,
+                                                        tLine       = state^.sLine,
+                                                        tLineChar   = state^.sLineChar,
                                                         tCode       = Error,
                                                         tText       = message }
-    in if withFollowing && state|>sInput /= []
-       then D.append tokens' $ D.singleton Token { tByteOffset = state|>sByteOffset,
-                                                   tCharOffset = state|>sCharOffset,
-                                                   tLine       = state|>sLine,
-                                                   tLineChar   = state|>sLineChar,
+    in if withFollowing && state^.sInput /= []
+       then D.append tokens' $ D.singleton Token { tByteOffset = state^.sByteOffset,
+                                                   tCharOffset = state^.sCharOffset,
+                                                   tLine       = state^.sLine,
+                                                   tLineChar   = state^.sLineChar,
                                                    tCode       = Unparsed,
-                                                   tText       = map snd $ state|>sInput }
+                                                   tText       = map snd $ state^.sInput }
        else tokens'
 
 -- | @commitBugs reply@ inserts an error token if a commit was made outside a
 -- named choice. This should never happen outside tests.
 commitBugs :: Reply result -> D.DList Token
 commitBugs reply =
-  let tokens = reply|>rTokens
-      state = reply|>rState
-  in case reply|>rCommit of
+  let tokens = reply^.rTokens
+      state = reply^.rState
+  in case reply^.rCommit of
           Nothing     -> tokens
-          Just commit -> D.append tokens $ D.singleton Token { tByteOffset = state|>sByteOffset,
-                                                               tCharOffset = state|>sCharOffset,
-                                                               tLine       = state|>sLine,
-                                                               tLineChar   = state|>sLineChar,
+          Just commit -> D.append tokens $ D.singleton Token { tByteOffset = state^.sByteOffset,
+                                                               tCharOffset = state^.sCharOffset,
+                                                               tLine       = state^.sLine,
+                                                               tLineChar   = state^.sLineChar,
                                                                tCode       = Error,
                                                                tText       = "Commit to '" ++ commit ++ "' was made outside it" }
 
@@ -1246,7 +1248,7 @@ tokenize = patternTokenizer l_yaml_stream
 -- reports the encoding (which was already detected when we started parsing).
 bom :: Match match1 result1 => match1 -> Parser ()
 bom code = code
-         & (Parser $ \ state -> let text = case state|>sEncoding of
+         & (Parser $ \ state -> let text = case state^.sEncoding of
                                                 UTF8    -> "TF-8"
                                                 UTF16LE -> "TF-16LE"
                                                 UTF16BE -> "TF-16BE"
@@ -1263,7 +1265,7 @@ na = error "Accessing non-applicable indentation"
 -- | @asInteger@ returns the last consumed character, which is assumed to be a
 -- decimal digit, as an integer.
 asInteger :: Parser Int
-asInteger = Parser $ \ state -> returnReply state $ ord (state|>sLast) .- 48
+asInteger = Parser $ \ state -> returnReply state $ ord (state^.sLast) .- 48
 
 -- | @result value@ is the same as /return value/ except that we give the
 -- Haskell type deduction the additional boost it needs to figure out this is
