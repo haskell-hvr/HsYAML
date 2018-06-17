@@ -21,7 +21,6 @@ module Data.YAML.Token.Encoding
 
 import qualified Data.ByteString.Lazy       as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
-import           Data.Char                  (chr, ord)
 
 import           Util
 

@@ -26,6 +26,7 @@ import           Numeric.Natural              as X (Natural)
 import           Control.Monad.Except
 import           Control.Monad.Identity       as X
 
+import           Data.Char                    as X (chr, ord)
 import           Data.Map                     as X (Map)
 import           Data.Monoid                  as X (Monoid (mappend, mempty))
 import           Data.Set                     as X (Set)

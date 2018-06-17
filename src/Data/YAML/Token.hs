@@ -32,6 +32,7 @@ import qualified Prelude
 import           Data.YAML.Token.Encoding   (Encoding (..), decode)
 
 import           Util                       hiding (empty)
+import qualified Util
 
 -- * Generic operators
 --
@@ -178,12 +179,12 @@ instance Show Code where
 
 -- | Parsed token.
 data Token = Token {
-    tByteOffset :: Int,   -- ^ 0-base byte offset in stream.
-    tCharOffset :: Int,   -- ^ 0-base character offset in stream.
-    tLine       :: Int,   -- ^ 1-based line number.
-    tLineChar   :: Int,   -- ^ 0-based character in line.
-    tCode       :: Code,  -- ^ Specific token 'Code'.
-    tText       :: String -- ^ Contained input chars, if any.
+    tByteOffset :: !Int,   -- ^ 0-base byte offset in stream.
+    tCharOffset :: !Int,   -- ^ 0-base character offset in stream.
+    tLine       :: !Int,   -- ^ 1-based line number.
+    tLineChar   :: !Int,   -- ^ 0-based character in line.
+    tCode       :: !Code,  -- ^ Specific token 'Code'.
+    tText       :: !String -- ^ Contained input chars, if any.
   } deriving Show
 
 
@@ -208,7 +209,10 @@ data Token = Token {
 -- contains a polymorphic \"UserState\" field etc.
 
 -- | A 'Parser' is basically a function computing a 'Reply'.
-data Parser result = Parser (State -> Reply result)
+newtype Parser result = Parser (State -> Reply result)
+
+applyParser :: Parser result -> State -> Reply result
+applyParser (Parser p) s = p s
 
 -- | The 'Result' of each invocation is either an error, the actual result, or
 -- a continuation for computing the actual result.
@@ -400,31 +404,46 @@ unexpectedReply state = case state^.sInput of
 
 
 instance Functor Parser where
-  fmap = liftM
+  fmap g f = Parser $ \state ->
+    let reply = applyParser f state
+    in case reply^.rResult of
+       Failed message -> reply { rResult = Failed message }
+       Result x       -> reply { rResult = Result (g x) }
+       More parser    -> reply { rResult = More $ fmap g parser }
+
 
 instance Applicative Parser where
-  pure = return
+  pure result = Parser $ \state -> returnReply state result
+
   (<*>) = ap
+
+  left *> right = Parser $ \state ->
+    let reply = applyParser left state
+    in case reply^.rResult of
+       Failed message -> reply { rResult = Failed message }
+       Result _       -> reply { rResult = More right }
+       More parser    -> reply { rResult = More $ parser *> right }
 
 -- | Allow using the @do@ notation for our parsers, which makes for short and
 -- sweet @do@ syntax when we want to examine the results (we typically don't).
 instance Monad Parser where
 
   -- @return result@ does just that - return a /result/.
-  return result = Parser $ \ state -> returnReply state result
+  return = pure
 
   -- @left >>= right@ applies the /left/ parser, and if it didn't fail
   -- applies the /right/ one (well, the one /right/ returns).
-  left >>= right = bindParser left right
-                   where bindParser (Parser left) right = Parser $ \ state ->
-                           let reply = left state
-                           in case reply^.rResult of
-                                   Failed message -> reply { rResult = Failed message }
-                                   Result value   -> reply { rResult = More $ right value }
-                                   More parser    -> reply { rResult = More $ bindParser parser right }
+  left >>= right = Parser $ \state ->
+    let reply = applyParser left state
+    in case reply^.rResult of
+       Failed message -> reply { rResult = Failed message }
+       Result value   -> reply { rResult = More $ right value }
+       More parser    -> reply { rResult = More $ parser >>= right }
+
+  (>>) = (*>)
 
   -- @fail message@ does just that - fails with a /message/.
-  fail message = Parser $ \ state -> failReply state message
+  fail message = Parser $ \state -> failReply state message
 
 -- ** Parsing operators
 --
@@ -465,14 +484,16 @@ infix  0 >!
 (%) :: (Match match result) => match -> Int -> Pattern
 parser % n
   | n <= 0 = empty
-  | n > 0  = parser & parser % n .- 1
+  | n >  0 = parser' *> (parser' % n .- 1)
+  where
+    parser' = match parser
 
 -- | @parser <% n@ matches fewer than /n/ occurrences of /parser/.
 (<%) :: (Match match result) => match -> Int -> Pattern
 parser <% n
   | n < 1 = fail "Fewer than 0 repetitions"
   | n == 1 = reject parser Nothing
-  | n > 1  = DeLess ^ ( parser ! DeLess & parser <% n .- 1 / empty )
+  | n > 1  = DeLess ^ ( ((parser ! DeLess) *> (parser <% n .- 1)) <|> empty )
 
 data Decision = DeNone -- ""
               | DeStar -- "*"
@@ -497,12 +518,12 @@ decision ^ parser = choice decision $ match parser
 -- | @parser ! decision@ commits to /decision/ (in an option) after
 -- successfully matching the /parser/.
 (!) :: (Match match result) => match -> Decision -> Pattern
-parser ! decision = parser & commit decision
+parser ! decision = match parser *> commit decision
 
 -- | @parser ?! decision@ commits to /decision/ (in an option) if the current
 -- position matches /parser/, without consuming any characters.
 (?!) :: (Match match result) => match -> Decision -> Pattern
-parser ?! decision = peek parser & commit decision
+parser ?! decision = peek parser *> commit decision
 
 -- | @lookbehind <?@ matches the current point without consuming any
 -- characters, if the previous character matches the lookbehind parser (single
@@ -523,66 +544,63 @@ parser ?! decision = peek parser & commit decision
 -- | @parser - rejected@ matches /parser/, except if /rejected/ matches at this
 -- point.
 (-) :: (Match match1 result1, Match match2 result2) => match1 -> match2 -> Parser result1
-parser - rejected = reject rejected Nothing & parser
+parser - rejected = reject rejected Nothing *> match parser
 
 -- | @before & after@ parses /before/ and, if it succeeds, parses /after/. This
 -- basically invokes the monad's @>>=@ (bind) method.
 (&) :: (Match match1 result1, Match match2 result2) => match1 -> match2 -> Parser result2
-before & after = (match before) >> (match after)
+before & after = match before *> match after
 
 -- | @first \/ second@ tries to parse /first/, and failing that parses
 -- /second/, unless /first/ has committed in which case is fails immediately.
 (/) :: (Match match1 result, Match match2 result) => match1 -> match2 -> Parser result
-first / second = Parser $ \ state ->
-  let Parser parser = decide (match first) (match second)
-  in parser state
+first / second = Parser $ applyParser (match first <|> match second)
 
 -- | @(optional ?)@ tries to match /parser/, otherwise does nothing.
 (?) :: (Match match result) => match -> Pattern
-(?) optional = (optional & empty) / empty
+(?) optional = (match optional *> empty) <|> empty
 
 -- | @(parser *)@ matches zero or more occurrences of /repeat/, as long as each
 -- one actually consumes input characters.
 (*) :: (Match match result) => match -> Pattern
 (*) parser = DeStar ^ zomParser
   where
-    zomParser = (parser ! DeStar & zomParser) / empty
+    zomParser = ((parser ! DeStar) *> match zomParser) <|> empty
 
 -- | @(parser +)@ matches one or more occurrences of /parser/, as long as each
 -- one actually consumed input characters.
 (+) :: (Match match result) => match -> Pattern
-(+) parser = parser & (parser *)
+(+) parser = match parser *> (parser *)
 
 -- ** Basic parsers
 
--- | @decide first second@ tries to parse /first/, and failing that parses
+-- | @first <|> second@ tries to parse /first/, and failing that parses
 -- /second/, unless /first/ has committed in which case is fails immediately.
-decide :: Parser result -> Parser result -> Parser result
-decide left right = Parser $ \ state ->
-  let Parser parser = decideParser state D.empty left right
-  in parser state
-  where decideParser point tokens (Parser left) right = Parser $ \state ->
-          let reply = left state
-              tokens' reply = D.append tokens $ reply^.rTokens
-          in case (reply^.rResult, reply^.rCommit) of
-                  (Failed _,    _)      -> Reply { rState  = point,
-                                                   rTokens = D.empty,
-                                                   rResult = More right,
-                                                   rCommit = Nothing }
-                  (Result _,   _)       -> reply { rTokens = tokens' reply }
-                  (More left', Just _)  -> reply { rTokens = tokens' reply,
-                                                   rResult = More left' }
-                  (More left', Nothing) -> let Parser parser = decideParser point (tokens' reply) left' right
-                                           in parser $ reply^.rState
+instance Alternative Parser where
+  empty = fail "empty"
+
+  left <|> right = Parser $ \state -> decideParser state D.empty left right state
+    where
+      decideParser point tokens left right state =
+        let reply = applyParser left state
+            tokens' = D.append tokens $ reply^.rTokens
+        in case (reply^.rResult, reply^.rCommit) of
+                (Failed _,    _)      -> Reply { rState  = point,
+                                                 rTokens = D.empty,
+                                                 rResult = More right,
+                                                 rCommit = Nothing }
+                (Result _,   _)       -> reply { rTokens = tokens' }
+                (More _, Just _)      -> reply { rTokens = tokens' }
+                (More left', Nothing) -> decideParser point tokens' left' right (reply^.rState)
+
 
 -- | @choice decision parser@ provides a /decision/ name to the choice about to
 -- be made in /parser/, to allow to @commit@ to it.
 choice :: Decision -> Parser result -> Parser result
 choice decision parser = Parser $ \ state ->
-  let Parser parser' = choiceParser (state^.sDecision) decision parser
-  in parser' state { sDecision = decision }
-  where choiceParser parentDecision makingDecision (Parser parser) = Parser $ \ state ->
-          let reply   = parser state
+  applyParser (choiceParser (state^.sDecision) decision parser) state { sDecision = decision }
+  where choiceParser parentDecision makingDecision parser = Parser $ \ state ->
+          let reply   = applyParser parser state
               commit' = case reply^.rCommit of
                              Nothing                                    -> Nothing
                              Just decision | decision == makingDecision -> Nothing
@@ -596,27 +614,25 @@ choice decision parser = Parser $ \ state ->
 
 -- | @parser ``recovery`` pattern@ parses the specified /parser/; if it fails,
 -- it continues to the /recovery/ parser to recover.
-recovery :: (Match match1 result, Match match2 result) => match1 -> match2 -> Parser result
+recovery :: (Match match1 result) => match1 -> Parser result -> Parser result
 recovery pattern recover =
   Parser $ \ state ->
-    let (Parser parser) = match pattern
-        reply = parser state
+    let reply = applyParser (match pattern) state
     in if state^.sIsPeek
           then reply
           else case reply^.rResult of
                     Result _       -> reply
                     More more      -> reply { rResult = More $ more `recovery` recover }
-                    Failed message -> reply { rResult = More $ fake Error message & unparsed & recover }
-    where unparsed = let (Parser parser) = match finishToken
-                     in Parser $ \ state -> parser $ state { sCode = Unparsed }
+                    Failed message -> reply { rResult = More $ fake Error message *> unparsed *> recover }
+    where unparsed = Parser $ \ state -> applyParser (match finishToken) $ state { sCode = Unparsed }
 
 -- | @prev parser@ succeeds if /parser/ matches at the previous character. It
 -- does not consume any input.
 prev :: (Match match result) => match -> Parser result
 prev parser = Parser $ \ state ->
   prevParser state (match parser) state { sIsPeek = True, sInput = (-1, state^.sLast) : state^.sInput }
-  where prevParser point (Parser parser) state =
-          let reply = parser state
+  where prevParser point parser state =
+          let reply = applyParser parser state
           in case reply^.rResult of
                   Failed message -> failReply point message
                   Result value   -> returnReply point value
@@ -627,8 +643,8 @@ prev parser = Parser $ \ state ->
 peek :: (Match match result) => match -> Parser result
 peek parser = Parser $ \ state ->
   peekParser state (match parser) state { sIsPeek = True }
-  where peekParser point (Parser parser) state =
-          let reply = parser state
+  where peekParser point parser state =
+          let reply = applyParser parser state
           in case reply^.rResult of
                   Failed message -> failReply point message
                   Result value   -> returnReply point value
@@ -639,37 +655,37 @@ peek parser = Parser $ \ state ->
 -- otherwise the messages uses the current character.
 reject :: (Match match result) => match -> Maybe String -> Pattern
 reject parser name = Parser $ \ state ->
-  rejectParser state name (match parser) state { sIsPeek = True }
-  where rejectParser point name (Parser parser) state =
-          let reply = parser state
-          in case reply^.rResult of
-                  Failed _message -> returnReply point ()
-                  Result _value   -> case name of
-                                         Nothing   -> unexpectedReply point
-                                         Just text -> failReply point $ "Unexpected " ++ text
-                  More parser'    -> rejectParser point name parser' $ reply^.rState
+    rejectParser state name (match parser) state { sIsPeek = True }
+  where
+    rejectParser point name parser state =
+      let reply = applyParser parser state
+      in case reply^.rResult of
+              Failed _message -> returnReply point ()
+              Result _value   -> case name of
+                                     Nothing   -> unexpectedReply point
+                                     Just text -> failReply point $ "Unexpected " ++ text
+              More parser'    -> rejectParser point name parser' $ reply^.rState
 
 -- | @upto parser@ consumes all the character up to and not including the next
 -- point where the specified parser is a match.
 upto :: Pattern -> Pattern
-
-upto parser = ( ( parser >!) & nextIf (const True) *)
+upto parser = ( ( parser >!) *> nextIf (const True) *)
 
 -- | @nonEmpty parser@ succeeds if /parser/ matches some non-empty input
 -- characters at this point.
 nonEmpty :: (Match match result) => match -> Parser result
 nonEmpty parser = Parser $ \ state ->
-  let Parser parser' = nonEmptyParser (state^.sCharOffset) (match parser)
-  in parser' state
-  where nonEmptyParser offset (Parser parser) = Parser $ \ state ->
-          let reply = parser state
-              state' = reply^.rState
-          in case reply^.rResult of
-                  Failed _message -> reply
-                  Result _value   -> if state'^.sCharOffset > offset
-                                       then reply
-                                       else failReply state' "Matched empty pattern"
-                  More parser'    -> reply { rResult = More $ nonEmptyParser offset parser' }
+    applyParser (nonEmptyParser (state^.sCharOffset) (match parser)) state
+  where
+    nonEmptyParser offset parser = Parser $ \ state ->
+      let reply = applyParser parser state
+          state' = reply^.rState
+      in case reply^.rResult of
+              Failed _message -> reply
+              Result _value   -> if state'^.sCharOffset > offset
+                                   then reply
+                                   else failReply state' "Matched empty pattern"
+              More parser'    -> reply { rResult = More $ nonEmptyParser offset parser' }
 
 -- | @empty@ always matches without consuming any input.
 empty :: Pattern
@@ -714,20 +730,21 @@ nextLine = Parser $ \ state ->
 -- invocation, using the /setField/ and /getField/ functions to manipulate it.
 with :: (value -> State -> State) -> (State -> value) -> value -> Parser result -> Parser result
 with setField getField value parser = Parser $ \ state ->
-  let value' = getField state
-      Parser parser' = value' `seq` withParser value' parser
-  in parser' $ setField value state
-  where withParser parentValue (Parser parser) = Parser $ \ state ->
-          let reply = parser state
-          in case reply^.rResult of
-                  Failed _     -> reply { rState = setField parentValue $ reply^.rState }
-                  Result _     -> reply { rState = setField parentValue $ reply^.rState }
-                  More parser' -> reply { rResult = More $ withParser parentValue parser' }
+    let value' = getField state
+        Parser parser' = value' `seq` withParser value' parser
+    in parser' $ setField value state
+  where
+    withParser parentValue parser = Parser $ \ state ->
+        let reply = applyParser parser state
+        in case reply^.rResult of
+             Failed _     -> reply { rState = setField parentValue $ reply^.rState }
+             Result _     -> reply { rState = setField parentValue $ reply^.rState }
+             More parser' -> reply { rResult = More $ withParser parentValue parser' }
 
 -- | @parser ``forbidding`` pattern@ parses the specified /parser/ ensuring
 -- that it does not contain anything matching the /forbidden/ parser.
-forbidding :: (Match match1 result1, Match match2 result2) => match1 -> match2 -> Parser result1
-forbidding parser forbidden = with setForbidden sForbidden (Just $ forbidden & empty) (match parser)
+forbidding :: (Match match1 result1) => match1 -> Parser result1 -> Parser result1
+forbidding parser forbidden = with setForbidden sForbidden (Just $ forbidden *> empty) (match parser)
 
 -- | @parser ``limitedTo`` limit@ parses the specified /parser/
 -- ensuring that it does not consume more than the /limit/ input chars.
@@ -741,49 +758,46 @@ limitedTo parser limit = with setLimit sLimit limit (match parser)
 -- (and buffers) the next input char if it satisfies /test/.
 nextIf :: (Char -> Bool) -> Pattern
 nextIf test = Parser $ \ state ->
-  case state^.sForbidden of
-       Nothing     -> limitedNextIf state
-       Just parser -> let Parser parser' = reject parser $ Just "forbidden pattern"
-                          reply = parser' state { sForbidden = Nothing }
-                      in case reply^.rResult of
-                              Failed _ -> reply
-                              Result _ -> limitedNextIf state
-  where limitedNextIf state =
-          case state^.sLimit of
-               -1     -> consumeNextIf state
-               0      -> failReply state "Lookahead limit reached"
-               _limit -> consumeNextIf state { sLimit = state^.sLimit .- 1 }
-        consumeNextIf state =
-          case state^.sInput of
-               ((offset, char):rest) | test char -> let chars = if state^.sIsPeek
-                                                                   then []
-                                                                   else char:(state^.sChars)
-                                                        byte_offset = charsOf sByteOffset sCharsByteOffset
-                                                        char_offset = charsOf sCharOffset sCharsCharOffset
-                                                        line        = charsOf sLine       sCharsLine
-                                                        line_char   = charsOf sLineChar   sCharsLineChar
-                                                        is_sol = if char == '\xFEFF'
-                                                                    then state^.sIsSol
-                                                                    else False
-                                                        state' = state { sInput           = rest,
-                                                                         sLast            = char,
-                                                                         sChars           = chars,
-                                                                         sCharsByteOffset = byte_offset,
-                                                                         sCharsCharOffset = char_offset,
-                                                                         sCharsLine       = line,
-                                                                         sCharsLineChar   = line_char,
-                                                                         sIsSol           = is_sol,
-                                                                         sByteOffset      = offset,
-                                                                         sCharOffset      = state^.sCharOffset .+ 1,
-                                                                         sLineChar        = state^.sLineChar .+ 1 }
-                                                    in returnReply state' ()
-                           | otherwise -> unexpectedReply state
-               []                      -> unexpectedReply state
-          where charsOf field charsField = if state^.sIsPeek
-                                              then -1
-                                              else if state^.sChars == []
-                                                      then state^.field
-                                                      else state^.charsField
+    case state^.sForbidden of
+         Nothing     -> limitedNextIf state
+         Just parser -> let reply = applyParser (reject parser $ Just "forbidden pattern") state { sForbidden = Nothing }
+                        in case reply^.rResult of
+                                Failed _ -> reply
+                                Result _ -> limitedNextIf state
+  where
+    limitedNextIf state =
+        case state^.sLimit of
+          -1     -> consumeNextIf state
+          0      -> failReply state "Lookahead limit reached"
+          _limit -> consumeNextIf state { sLimit = state^.sLimit .- 1 }
+
+    consumeNextIf state =
+        case state^.sInput of
+          ((offset, char):rest) | test char -> let chars       = if state^.sIsPeek then [] else char:(state^.sChars)
+                                                   byte_offset = charsOf sByteOffset sCharsByteOffset
+                                                   char_offset = charsOf sCharOffset sCharsCharOffset
+                                                   line        = charsOf sLine       sCharsLine
+                                                   line_char   = charsOf sLineChar   sCharsLineChar
+                                                   is_sol      = char == '\xFEFF' && state^.sIsSol
+                                                   state' = state { sInput           = rest,
+                                                                    sLast            = char,
+                                                                    sChars           = chars,
+                                                                    sCharsByteOffset = byte_offset,
+                                                                    sCharsCharOffset = char_offset,
+                                                                    sCharsLine       = line,
+                                                                    sCharsLineChar   = line_char,
+                                                                    sIsSol           = is_sol,
+                                                                    sByteOffset      = offset,
+                                                                    sCharOffset      = state^.sCharOffset .+ 1,
+                                                                    sLineChar        = state^.sLineChar .+ 1 }
+                                               in returnReply state' ()
+                      | otherwise -> unexpectedReply state
+          []                      -> unexpectedReply state
+      where
+        charsOf field charsField
+          | state^.sIsPeek       = -1
+          | state^.sChars == []  = state^.field
+          | otherwise            = state^.charsField
 
 -- ** Producing tokens
 
@@ -879,12 +893,11 @@ wrapTokens beginCode endCode pattern = emptyToken beginCode
 prefixErrorWith :: (Match match result) => match -> Pattern -> Parser result
 prefixErrorWith pattern prefix =
   Parser $ \ state ->
-    let (Parser parser) = match pattern
-        reply = parser state
+    let reply = applyParser (match pattern) state
     in case reply^.rResult of
-            Result _       -> reply
-            More more      -> reply { rResult = More $ prefixErrorWith more prefix }
-            Failed message -> reply { rResult = More $ prefix & (fail message :: Parser result) }
+         Result _       -> reply
+         More more      -> reply { rResult = More $ prefixErrorWith more prefix }
+         Failed message -> reply { rResult = More $ prefix & (fail message :: Parser result) }
 
 -- * Production parameters
 
@@ -957,15 +970,16 @@ type Tokenizer = BLC.ByteString -> Bool -> [Token]
 -- | @patternTokenizer pattern@ converts the /pattern/ to a simple 'Tokenizer'.
 patternTokenizer :: Pattern -> Tokenizer
 patternTokenizer pattern input withFollowing =
-  D.toList $ patternParser (wrap pattern) (initialState input)
-  where patternParser (Parser parser) state =
-          let reply = parser state
-              tokens = commitBugs reply
-              state' = reply^.rState
-          in case reply^.rResult of
-                  Failed message -> errorTokens tokens state' message withFollowing
-                  Result _       -> tokens
-                  More parser'   -> D.append tokens $ patternParser parser' state'
+    D.toList $ patternParser (wrap pattern) (initialState input)
+  where
+    patternParser parser state =
+      let reply = applyParser parser state
+          tokens = commitBugs reply
+          state' = reply^.rState
+      in case reply^.rResult of
+              Failed message -> errorTokens tokens state' message withFollowing
+              Result _       -> tokens
+              More parser'   -> D.append tokens $ patternParser parser' state'
 
 -- | @errorTokens tokens state message withFollowing@ appends an @Error@ token
 -- with the specified /message/ at the end of /tokens/, and if /withFollowing/
@@ -1030,8 +1044,7 @@ bom code = code
                                                 UTF16BE -> "TF-16BE"
                                                 UTF32LE -> "TF-32LE"
                                                 UTF32BE -> "TF-32BE"
-                                    Parser parser = fake Bom text
-                                in parser state)
+                                in applyParser (fake Bom text) state)
 
 -- | @na@ is the \"non-applicable\" indentation value. We use Haskell's laziness
 -- to verify it really is never used.
