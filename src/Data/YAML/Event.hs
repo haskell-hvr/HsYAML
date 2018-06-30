@@ -8,6 +8,8 @@
 -- Event-stream oriented YAML parsing API
 module Data.YAML.Event
     ( parseEvents
+    , writeEvents
+    , writeEventsText
     , EvStream
     , Event(..)
     , ScalarStyle(..)
@@ -18,6 +20,7 @@ module Data.YAML.Event
     ) where
 
 import           Data.YAML.Event.Internal
+import           Data.YAML.Event.Writer   (writeEvents, writeEventsText)
 
 import qualified Data.ByteString.Lazy     as BS.L
 import qualified Data.Char                as C
