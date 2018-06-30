@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
@@ -155,7 +156,7 @@ cmdYaml2Event = do
         _  -> hPutStrLn stderr ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")
       exitFailure
     Right event -> do
-      hPutStrLn stdout (ev2str event)
+      hPutStrLn stdout (ev2str True event)
       hFlush stdout
 
 
@@ -316,12 +317,12 @@ cmdRunTml args = do
               pure (Fail FailParse)
 
         Right evs' -> do
-          let evs'' = map ev2str evs'
+          let evs'' = map (ev2str False) evs'
           if evs'' == testEvDat
              then do
 
                let outYamlDatIut = writeEvents YT.UTF8 evs'
-                   outYamlEvsIut = either (const []) (map ev2str) $ sequence $ parseEvents outYamlDatIut
+                   outYamlEvsIut = either (const []) (map (ev2str False)) $ sequence $ parseEvents outYamlDatIut
 
                unless (outYamlEvsIut == evs'') $ do
                  putStrLn' ("\nWARNING: (iut /= ref)")
@@ -435,48 +436,52 @@ cmdTestmlCompiler _ = do
 putStrLn' :: String -> IO ()
 putStrLn' msg = putStrLn ("  " ++ msg)
 
-
-ev2str :: Event -> String
-ev2str StreamStart           = "+STR"
-ev2str (DocumentStart True)  = "+DOC ---"
-ev2str (DocumentStart False) = "+DOC"
-ev2str MappingEnd            = "-MAP"
-ev2str (MappingStart manc mtag _)  = "+MAP" ++ ancTagStr manc mtag
-ev2str SequenceEnd           = "-SEQ"
-ev2str (SequenceStart manc mtag _) = "+SEQ" ++ ancTagStr manc mtag
-ev2str (DocumentEnd True) = "-DOC ..."
-ev2str (DocumentEnd False) = "-DOC"
-ev2str StreamEnd             = "-STR"
-ev2str (Alias a)             = "=ALI *" ++ T.unpack a
-ev2str (YE.Scalar manc mtag sty v) = "=VAL" ++ ancTagStr manc mtag ++ v'
+ev2str :: Bool -> Event -> String
+ev2str withColSty = \case
+    StreamStart                 -> "+STR"
+    DocumentStart True          -> "+DOC ---"
+    DocumentStart False         -> "+DOC"
+    MappingEnd                  -> "-MAP"
+    (MappingStart manc mtag Flow)
+      | withColSty              -> "+MAP {}" ++ ancTagStr manc mtag
+    (MappingStart manc mtag _)  -> "+MAP"    ++ ancTagStr manc mtag
+    SequenceEnd                 -> "-SEQ"
+    (SequenceStart manc mtag Flow)
+      | withColSty              -> "+SEQ []" ++ ancTagStr manc mtag
+    SequenceStart manc mtag _   -> "+SEQ"    ++ ancTagStr manc mtag
+    DocumentEnd True            -> "-DOC ..."
+    DocumentEnd False           -> "-DOC"
+    StreamEnd                   -> "-STR"
+    Alias a                     -> "=ALI *"  ++ T.unpack a
+    YE.Scalar manc mtag sty v   -> "=VAL"    ++ ancTagStr manc mtag ++ styStr sty ++ quote2 v
   where
-    v' = case sty of
-           Plain        -> " :"  ++ quote2 v
-           DoubleQuoted -> " \"" ++ quote2 v
-           Literal      -> " |"  ++ quote2 v
-           Folded       -> " >"  ++ quote2 v
-           SingleQuoted -> " '"  ++ quote2 v
+    styStr = \case
+           Plain        -> " :"
+           DoubleQuoted -> " \""
+           Literal      -> " |"
+           Folded       -> " >"
+           SingleQuoted -> " '"
 
-ancTagStr manc mtag = anc' ++ tag'
-  where
-    anc' = case manc of
-             Nothing  -> ""
-             Just anc -> " &" ++ T.unpack anc
+    ancTagStr manc mtag = anc' ++ tag'
+      where
+        anc' = case manc of
+                 Nothing  -> ""
+                 Just anc -> " &" ++ T.unpack anc
 
-    tag' = case tagToText mtag of
-             Nothing -> ""
-             Just t  -> " <" ++ T.unpack t ++ ">"
+        tag' = case tagToText mtag of
+                 Nothing -> ""
+                 Just t  -> " <" ++ T.unpack t ++ ">"
 
 
-quote2 :: T.Text -> String
-quote2 = concatMap go . T.unpack
-  where
-    go c | c == '\n' = "\\n"
-         | c == '\t' = "\\t"
-         | c == '\b' = "\\b"
-         | c == '\r' = "\\r"
-         | c == '\\' = "\\\\"
-         | otherwise = [c]
+    quote2 :: T.Text -> String
+    quote2 = concatMap go . T.unpack
+      where
+        go c | c == '\n' = "\\n"
+             | c == '\t' = "\\t"
+             | c == '\b' = "\\b"
+             | c == '\r' = "\\r"
+             | c == '\\' = "\\\\"
+             | otherwise = [c]
 
 
 
