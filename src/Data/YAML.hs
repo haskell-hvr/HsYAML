@@ -304,7 +304,7 @@ withInt :: String -> (Integer -> Parser a) -> Node -> Parser a
 withInt _        f (Scalar (SInt b)) = f b
 withInt expected _ v                 = typeMismatch expected v
 
--- | @since 0.1.0.0
+-- | @since 0.1.1.0
 instance FromYAML Natural where
   parseYAML = withInt "!!int" $ \b -> if b < 0 then fail ("!!int " ++ show b ++ " out of range for 'Natural'")
                                                else pure (fromInteger b)
