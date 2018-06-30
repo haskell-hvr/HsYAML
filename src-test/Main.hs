@@ -47,16 +47,40 @@ main = do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
 
+    ("yaml2event0":args')
+      | null args' -> cmdYaml2Event0
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2event0 sub-command"
+          exitFailure
+
     ("yaml2token":args')
       | null args' -> cmdYaml2Token
       | otherwise -> do
           hPutStrLn stderr "unexpected arguments passed to yaml2token sub-command"
           exitFailure
 
+    ("yaml2token0":args')
+      | null args' -> cmdYaml2Token0
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2token0 sub-command"
+          exitFailure
+
     ("yaml2json":args')
       | null args' -> cmdYaml2Json
       | otherwise -> do
           hPutStrLn stderr "unexpected arguments passed to yaml2json sub-command"
+          exitFailure
+
+    ("yaml2yaml":args')
+      | null args' -> cmdYaml2Yaml
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2yaml sub-command"
+          exitFailure
+
+    ("yaml2yaml-":args')
+      | null args' -> cmdYaml2Yaml'
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2yaml- sub-command"
           exitFailure
 
     ("run-tml":args') -> cmdRunTml args'
@@ -68,8 +92,13 @@ main = do
       hPutStrLn stderr ""
       hPutStrLn stderr "Commands:"
       hPutStrLn stderr ""
+      hPutStrLn stderr "  yaml2token       reads YAML stream from STDIN and dumps tokens to STDOUT"
+      hPutStrLn stderr "  yaml2token0      reads YAML stream from STDIN and prints count of tokens to STDOUT"
       hPutStrLn stderr "  yaml2event       reads YAML stream from STDIN and dumps events to STDOUT"
+      hPutStrLn stderr "  yaml2event0      reads YAML stream from STDIN and prints count of events to STDOUT"
       hPutStrLn stderr "  yaml2json        reads YAML stream from STDIN and dumps JSON to STDOUT"
+      hPutStrLn stderr "  yaml2yaml        reads YAML stream from STDIN and dumps YAML to STDOUT (non-streaming version)"
+      hPutStrLn stderr "  yaml2yaml-       reads YAML stream from STDIN and dumps YAML to STDOUT (streaming version)"
       hPutStrLn stderr "  run-tml          run/validate YAML-specific .tml file(s)"
       hPutStrLn stderr "  testml-compiler  emulate testml-compiler"
 
@@ -89,6 +118,33 @@ cmdYaml2Token = do
     hPutStrLn stdout ""
   hFlush stdout
 
+cmdYaml2Token0 :: IO ()
+cmdYaml2Token0 = do
+  inYamlDat <- BS.L.getContents
+  print (length (YT.tokenize inYamlDat False))
+
+cmdYaml2Yaml :: IO ()
+cmdYaml2Yaml = do
+  inYamlDat <- BS.L.getContents
+  case (sequence $ parseEvents inYamlDat) of
+    Left (ofs,msg) -> do
+      case msg of
+        "" -> hPutStrLn stderr ("parsing error near byte offset " ++ show ofs)
+        _  -> hPutStrLn stderr ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")
+      exitFailure
+    Right events -> do
+      BS.L.hPutStr stdout (writeEvents YT.UTF8 events)
+      hFlush stdout
+
+-- lazy streaming version
+cmdYaml2Yaml' :: IO ()
+cmdYaml2Yaml' = do
+    inYamlDat <- BS.L.getContents
+    BS.L.hPutStr stdout $ writeEvents YT.UTF8 $ parseEvents' inYamlDat
+    hFlush stdout
+  where
+    parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) id) . parseEvents
+
 cmdYaml2Event :: IO ()
 cmdYaml2Event = do
   inYamlDat <- BS.L.getContents
@@ -101,6 +157,14 @@ cmdYaml2Event = do
     Right event -> do
       hPutStrLn stdout (ev2str event)
       hFlush stdout
+
+
+cmdYaml2Event0 :: IO ()
+cmdYaml2Event0 = do
+    inYamlDat <- BS.L.getContents
+    print (length (parseEvents' inYamlDat))
+  where
+    parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) id) . parseEvents
 
 -- | 'J.Value' look-alike
 data Value' = Object'  (Map Text Value')
