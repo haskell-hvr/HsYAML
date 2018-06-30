@@ -14,7 +14,7 @@
 -- |
 -- Copyright: © Oren Ben-Kiki 2007,
 --            © Herbert Valerio Riedel 2015-2018
--- SPDX-License-Identifier: GPL-3.0
+-- SPDX-License-Identifier: GPL-2.0-or-later
 --
 -- Tokenizer for the YAML 1.2 syntax as defined in <http://yaml.org/spec/1.2/spec.html>.
 --

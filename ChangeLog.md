@@ -2,6 +2,7 @@
 
 * Tolerate BOM at *each* `l-document-prefix` (rather than only at the first one encountered in a YAML stream)
 * Workaround broken `mtl-2.2.2` bundled in GHC 8.4.1 ([#1](https://github.com/hvr/HsYAML/issues/1))
+* Relax to GPL-2.0-or-later
 
 ### 0.1.1.1
 
