@@ -104,10 +104,10 @@ undoUTF32LE bytes offset
                     fourth   = BLC.head bytes'''
                     rest     = BLC.tail bytes'''
                 in (offset + 4,
-                    chr $ (ord first)
-                        + 256 * ((ord second)
-                        + 256 * ((ord third)
-                        + 256 * ((ord fourth))))):(undoUTF32LE rest $ offset + 4)
+                    chr $        ord first
+                        + 256 * (ord second
+                        + 256 * (ord third
+                        + 256 *  ord fourth))):(undoUTF32LE rest $ offset + 4)
 
 -- | @undoUTF32BE bytes offset@ decoded a UTF-32BE /bytes/ stream to Unicode
 -- chars.
@@ -124,10 +124,10 @@ undoUTF32BE bytes offset
                     fourth   = BLC.head bytes'''
                     rest     = BLC.tail bytes'''
                 in (offset + 4,
-                    chr $ (ord fourth)
-                        + 256 * ((ord third)
-                        + 256 * ((ord second)
-                        + 256 * ((ord first))))):(undoUTF32BE rest $ offset + 4)
+                    chr $        ord fourth
+                        + 256 * (ord third
+                        + 256 * (ord second
+                        + 256 *  ord first))):(undoUTF32BE rest $ offset + 4)
 
 -- ** UTF-16 decoding
 
@@ -138,7 +138,7 @@ combinePairs []                          = []
 combinePairs (head'@(_, head_char):tail')
   | '\xD800' <= head_char && head_char <= '\xDBFF' = combineLead head' tail'
   | '\xDC00' <= head_char && head_char <= '\xDFFF' = error "UTF-16 contains trail surrogate without lead surrogate"
-  | otherwise                                      = head':(combinePairs tail')
+  | otherwise                                      = head':combinePairs tail'
 
 -- | @combineLead lead rest@ combines the /lead/ surrogate with the head of the
 -- /rest/ of the input chars, assumed to be a /trail/ surrogate, and continues
@@ -156,7 +156,7 @@ surrogateOffset = 0x10000 - (0xD800 * 1024) - 0xDC00
 -- | @combineSurrogates lead trail@ combines two UTF-16 surrogates into a single
 -- Unicode character.
 combineSurrogates :: Char -> Char -> Char
-combineSurrogates lead trail = chr $ (ord lead) * 1024 + (ord trail) + surrogateOffset
+combineSurrogates lead trail = chr $ ord lead * 1024 + ord trail + surrogateOffset
 
 -- | @undoUTF18LE bytes offset@ decoded a UTF-16LE /bytes/ stream to Unicode
 -- chars.
@@ -168,7 +168,7 @@ undoUTF16LE bytes offset
                     bytes' = BLC.tail bytes
                     high   = BLC.head bytes'
                     rest   = BLC.tail bytes'
-                in (offset + 2, chr $ (ord low) + (ord high) * 256):(undoUTF16LE rest $ offset + 2)
+                in (offset + 2, chr $ ord low + ord high * 256):(undoUTF16LE rest $ offset + 2)
 
 -- | @undoUTF18BE bytes offset@ decoded a UTF-16BE /bytes/ stream to Unicode
 -- chars.
@@ -180,13 +180,13 @@ undoUTF16BE bytes offset
                     bytes' = BLC.tail bytes
                     low    = BLC.head bytes'
                     rest   = BLC.tail bytes'
-                in (offset + 2, chr $ (ord low) + (ord high) * 256):(undoUTF16BE rest $ offset + 2)
+                in (offset + 2, chr $ ord low + ord high * 256):(undoUTF16BE rest $ offset + 2)
 
 -- ** UTF-8 decoding
 
 -- | @undoUTF8 bytes offset@ decoded a UTF-8 /bytes/ stream to Unicode chars.
 undoUTF8 :: BLC.ByteString -> Int -> [(Int, Char)]
-undoUTF8 bytes offset = undoUTF8' (BL.unpack bytes) offset
+undoUTF8 bytes = undoUTF8' (BL.unpack bytes)
 
 w2c :: Word8 -> Char
 w2c = chr . fromIntegral
@@ -213,7 +213,7 @@ undoUTF8' (first:rest) !offset
 -- the /bytes/, and then continues to undo the UTF-8 encoding.
 decodeTwoUTF8 :: Word8 -> Int -> [Word8] -> [(Int, Char)]
 decodeTwoUTF8 first offset (second:rest)
-  | second < 0x80 || 0xBF < second = error $ "UTF-8 double byte char has invalid second byte"
+  | second < 0x80 || 0xBF < second = error "UTF-8 double byte char has invalid second byte"
   | otherwise = (offset', c) : undoUTF8' rest offset'
   where
     !offset' = offset + 2
@@ -230,9 +230,9 @@ decodeThreeUTF8 first offset (second:third:rest)
   | otherwise = (offset', c): undoUTF8' rest offset'
   where
     !offset' = offset + 3
-    !c       = chr(((w2i first)  - 0xE0) * 0x1000 +
-                   ((w2i second) - 0x80) * 0x40 +
-                   ((w2i third)  - 0x80))
+    !c       = chr((w2i first  - 0xE0) * 0x1000 +
+                   (w2i second - 0x80) * 0x40 +
+                   (w2i third  - 0x80))
 decodeThreeUTF8 _ _ _ =error "UTF-8 triple byte char is missing bytes at eof"
 
 -- | @decodeFourUTF8 first offset bytes@ decodes a four-byte UTF-8 character,
@@ -246,11 +246,9 @@ decodeFourUTF8 first offset (second:third:fourth:rest)
   | otherwise                      = (offset', c) : undoUTF8' rest offset'
   where
     !offset' = offset + 4
-    !c       = chr(((w2i first)  - 0xF0) * 0x40000 +
-                   ((w2i second) - 0x80) * 0x1000 +
-                   ((w2i third)  - 0x80) * 0x40 +
-                   ((w2i fourth) - 0x80))
+    !c       = chr((w2i first  - 0xF0) * 0x40000 +
+                   (w2i second - 0x80) * 0x1000 +
+                   (w2i third  - 0x80) * 0x40 +
+                   (w2i fourth - 0x80))
 
 decodeFourUTF8 _ _ _ = error "UTF-8 quad byte char is missing bytes at eof"
-
-
