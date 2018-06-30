@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE Safe                #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -14,6 +15,8 @@ module Util
     , readEither
     , fromIntegerMaybe
     , (<>)
+
+    , mapFromListNoDupes
 
     , module X
     ) where
@@ -34,6 +37,7 @@ import           Control.Monad.Identity       as X
 
 import           Data.Char                    as X (chr, ord)
 import           Data.Map                     as X (Map)
+import qualified Data.Map                     as Map
 import           Data.Monoid                  as X (Monoid (mappend, mempty))
 #if MIN_VERSION_base(4,9,0)
 import           Data.Semigroup               ((<>))
@@ -76,4 +80,19 @@ fromIntegerMaybe j
   where
     u = toInteger (maxBound :: n)
     l = toInteger (minBound :: n)
+
+
+
+mapFromListNoDupes :: Ord k => [(k,a)] -> Either (k,a) (Map k a)
+mapFromListNoDupes = go mempty
+  where
+    go !m [] = Right m
+    go !m ((k,!v):rest) = case mapInsertNoDupe k v m of
+                            Nothing -> Left (k,v)
+                            Just m' -> go m' rest
+
+mapInsertNoDupe :: Ord k => k -> a -> Map k a -> Maybe (Map k a)
+mapInsertNoDupe kx x t = case Map.insertLookupWithKey (\_ a _ -> a) kx x t of
+                           (Nothing, m) -> Just m
+                           (Just _, _)  -> Nothing
 

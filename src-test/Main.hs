@@ -216,7 +216,11 @@ instance FromYAML Value' where
 --        _          -> fail ("dictionary entry had non-string key " ++ show k)
 
 decodeAeson :: BS.L.ByteString -> Either String [J.Value]
-decodeAeson = fmap (map toProperValue) . decode
+decodeAeson = fmap (map toProperValue) . decode'
+  where
+    -- TODO
+    decode' :: FromYAML v => BS.L.ByteString -> Either String [v]
+    decode' bs0 = decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 -- | Try to convert 'Double' into 'Int64', return 'Nothing' if not
 -- representable loss-free as integral 'Int64' value.

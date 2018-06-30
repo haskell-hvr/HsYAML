@@ -51,6 +51,7 @@ data SchemaResolver = SchemaResolver
      { schemaResolverScalar   :: Tag -> YE.ScalarStyle -> T.Text -> Either String Scalar
      , schemaResolverSequence :: Tag -> Either String Tag
      , schemaResolverMapping  :: Tag -> Either String Tag
+     , schemaResolverMappingDuplicates :: Bool -- TODO: use something different from 'Bool'
      }
 
 
@@ -91,6 +92,8 @@ failsafeSchemaResolver = SchemaResolver{..}
       | t == tagBang = Right tagMap
       | otherwise    = Right t
 
+    schemaResolverMappingDuplicates = False
+
     -- sequences
     schemaResolverSequence t
       | t == tagBang = Right tagSeq
@@ -126,6 +129,8 @@ jsonSchemaResolver = SchemaResolver{..}
       | t == tagBang = Right tagMap
       | isUntagged t = Right tagMap
       | otherwise    = Right t
+
+    schemaResolverMappingDuplicates = False
 
     -- sequences
     schemaResolverSequence t
@@ -163,6 +168,8 @@ coreSchemaResolver = SchemaResolver{..}
       | t == tagBang = Right tagMap
       | isUntagged t = Right tagMap
       | otherwise    = Right t
+
+    schemaResolverMappingDuplicates = False
 
     -- sequences
     schemaResolverSequence t

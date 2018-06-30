@@ -175,7 +175,7 @@ decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
   where
     failsafeLoader = Loader { yScalar   = \t s v -> pure $ fmap Scalar (schemaResolverScalar t s v)
                             , ySequence = \t vs  -> pure $ schemaResolverSequence t >>= \t' -> Right (Sequence t' vs)
-                            , yMapping  = \t kvs -> pure $ schemaResolverMapping  t >>= \t' -> Right (Mapping t' (Map.fromList kvs))
+                            , yMapping  = \t kvs -> pure $ schemaResolverMapping  t >>= \t' -> (Mapping t' <$> mkMap kvs)
                             , yAlias    = if allowCycles
                                           then \_ _ n -> pure $ Right n
                                           else \_ c n -> pure $ if c then Left "cycle detected" else Right n
@@ -184,6 +184,11 @@ decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
                                           else \_ n   -> pure $ Right n
                             }
 
+    mkMap kvs
+      | schemaResolverMappingDuplicates = Right $! Map.fromList kvs
+      | otherwise = case mapFromListNoDupes kvs of
+          Left (k,_) -> Left ("Duplicate key in mapping: " ++ show k)
+          Right m    -> Right m
 
 ----------------------------------------------------------------------------
 

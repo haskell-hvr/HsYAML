@@ -6,6 +6,11 @@
     * `Style` type renamed to `ScalarType`
     * New `writeEvents` and `writeEventsText` function
 
+* Make `decode`, `decodeStrict`, `decodeNode`, and `decodeNode'` treat
+  duplicate keys (under the respective YAML schema) in YAML mappings
+  as a loader-error (controllable via new
+  `schemaResolverMappingDuplicates` schema property)
+
 ---
 
 ### 0.1.1.2
