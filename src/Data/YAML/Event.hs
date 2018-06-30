@@ -171,7 +171,7 @@ getUriTag toks0 = do
 -- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
 -- (which will be auto-detected).
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) $ eatBom $ Y.tokenize bs0 False)
+parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -179,11 +179,9 @@ parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (
       | otherwise = skipPast tc ts
     skipPast _ [] = error "the impossible happened"
 
-    eatBom :: [Y.Token] -> [Y.Token]
-    eatBom (Y.Token { Y.tCode = Y.Bom } : ts) = ts
-    eatBom ts                                 = ts
-
+    -- non-content whitespace
     isWhite :: Y.Token -> Bool
+    isWhite (Y.Token { Y.tCode = Y.Bom   })  = True -- BOMs can occur at each doc-start!
     isWhite (Y.Token { Y.tCode = Y.White })  = True
     isWhite (Y.Token { Y.tCode = Y.Indent }) = True
     isWhite (Y.Token { Y.tCode = Y.Break })  = True

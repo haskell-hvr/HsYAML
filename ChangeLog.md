@@ -1,3 +1,7 @@
+### 0.1.1.2
+
+* Tolerate BOM at *each* `l-document-prefix` (rather than only at the first one encountered in a YAML stream)
+
 ### 0.1.1.1
 
 * Reject (illegal) non-scalar code-points in UTF-32 streams
