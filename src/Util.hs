@@ -23,7 +23,12 @@ import           Data.Int                     as X
 import           Data.Word                    as X
 import           Numeric.Natural              as X (Natural)
 
-import           Control.Monad.Except
+#if !MIN_VERSION_mtl(2,2,2) || (__GLASGOW_HASKELL__ == 804 && __GLASGOW_HASKELL_PATCHLEVEL1__ < 2)
+import           Control.Monad.Except         (MonadError (throwError))
+#else
+import           Control.Monad.Except         (liftEither)
+#endif
+
 import           Control.Monad.Identity       as X
 
 import           Data.Char                    as X (chr, ord)
@@ -35,7 +40,9 @@ import           Data.Text                    as X (Text)
 import           Text.ParserCombinators.ReadP as P
 import           Text.Read
 
-#if !MIN_VERSION_mtl(2,2,2)
+-- GHC 8.4.1 shipped with a phony `mtl-2.2.2` and so we have to assume
+-- pessimistically that on GHC 8.4.1 only, mtl-2.2.2 may be broken (even if it was reinstalled)
+#if !MIN_VERSION_mtl(2,2,2) || (__GLASGOW_HASKELL__ == 804 && __GLASGOW_HASKELL_PATCHLEVEL1__ < 2)
 liftEither :: MonadError e m => Either e a -> m a
 liftEither = either throwError return
 #endif
