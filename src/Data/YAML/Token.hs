@@ -1,10 +1,8 @@
-{-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE PostfixOperators       #-}
 {-# LANGUAGE Safe                   #-}
-{-# LANGUAGE TypeSynonymInstances   #-}
 
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
@@ -221,12 +219,14 @@ data Result result = Failed String        -- ^ Parsing aborted with a failure.
                    | Result result        -- ^ Parsing completed with a result.
                    | More (Parser result) -- ^ Parsing is ongoing with a continuation.
 
+{-
 -- Showing a 'Result' is only used in debugging.
 instance (Show result) => Show (Result result) where
   show result = case result of
                      Failed message -> "Failed " ++ message
                      Result result  -> "Result " ++ (show result)
                      More _         -> "More"
+-}
 
 -- | Each invication of a 'Parser' yields a 'Reply'. The 'Result' is only one
 -- part of the 'Reply'.
