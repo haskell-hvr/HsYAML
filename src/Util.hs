@@ -13,6 +13,7 @@ module Util
     , readMaybe
     , readEither
     , fromIntegerMaybe
+    , (<>)
 
     , module X
     ) where
@@ -34,6 +35,11 @@ import           Control.Monad.Identity       as X
 import           Data.Char                    as X (chr, ord)
 import           Data.Map                     as X (Map)
 import           Data.Monoid                  as X (Monoid (mappend, mempty))
+#if MIN_VERSION_base(4,9,0)
+import           Data.Semigroup               ((<>))
+#else
+import           Data.Monoid                  ((<>))
+#endif
 import           Data.Set                     as X (Set)
 import           Data.Text                    as X (Text)
 
