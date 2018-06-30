@@ -1,3 +1,7 @@
+## 0.2.0.0
+
+TODO
+
 ### 0.1.1.2
 
 * Tolerate BOM at *each* `l-document-prefix` (rather than only at the first one encountered in a YAML stream)
