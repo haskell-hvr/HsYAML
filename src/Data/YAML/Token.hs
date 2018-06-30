@@ -236,12 +236,14 @@ data Reply result = Reply {
     rState  :: !State            -- ^ The updated parser state.
   }
 
+{-
 -- Showing a 'State' is only used in debugging.
 instance (Show result) => Show (Reply result) where
   show reply = "Result: "    ++ (show $ reply^.rResult)
             ++ ", Tokens: "  ++ (show $ D.toList $ reply^.rTokens)
             ++ ", Commit: "  ++ (show $ reply^.rCommit)
             ++ ", State: { " ++ (show $ reply^.rState) ++ "}"
+-}
 
 -- A 'Pattern' is a parser that doesn't have an (interesting) result.
 type Pattern = Parser ()
@@ -272,6 +274,7 @@ data State = State {
     sInput           :: ![(Int, Char)]    -- ^ The decoded input characters.
   }
 
+{-
 -- Showing a 'State' is only used in debugging. Note that forcing dump of
 -- @sInput@ will disable streaming it.
 instance Show State where
@@ -292,6 +295,7 @@ instance Show State where
             ++ ", Code: "            ++ (show $ state^.sCode)
             ++ ", Last: "            ++ (show $ state^.sLast)
 --          ++ ", Input: >>>"        ++ (show $ state^.sInput) ++ "<<<"
+-}
 
 -- | @initialState name input@ returns an initial 'State' for parsing the
 -- /input/ (with /name/ for error messages).
@@ -909,6 +913,7 @@ data Context = BlockOut     -- ^ Outside block sequence.
              | BlockKey     -- ^ Implicit block key.
              | FlowKey      -- ^ Implicit flow key.
 
+{-
 -- | @show context@ converts a 'Context' to a 'String'.
 instance Show Context where
   show context = case context of
@@ -932,12 +937,14 @@ instance Read Context where
                         "block_key" -> BlockKey
                         "flow_key"  -> FlowKey
                         _           -> error $ "unknown context: " ++ word
+-}
 
 -- | Chomp method.
 data Chomp = Strip -- ^ Remove all trailing line breaks.
            | Clip  -- ^ Keep first trailing line break.
            | Keep  -- ^ Keep all trailing line breaks.
 
+{-
 -- | @show chomp@ converts a 'Chomp' to a 'String'.
 instance Show Chomp where
   show chomp = case chomp of
@@ -953,6 +960,7 @@ instance Read Chomp where
                         "clip"  -> Clip
                         "keep"  -> Keep
                         _       -> error $ "unknown chomp: " ++ word
+-}
 
 -- * Tokenizers
 --
