@@ -251,12 +251,14 @@ unescapeSpcTab = T.replace "<SPC>" " " . T.replace "<TAB>" "\t"
 data TestPass = PassExpErr   -- ^ expected parse fail
               | PassEvs      -- ^ events ok
               | PassEvsJson  -- ^ events+json ok
+              | PassEvsJsonYaml
               deriving (Eq,Ord,Show)
 
 data TestFail = FailParse    -- ^ unexpected parse fail
               | FailSuccess  -- ^ unexpected parse success
               | FailEvs      -- ^ events wrong/mismatched
               | FailJson     -- ^ JSON wrong/mismatched
+              | FailYaml     -- ^ YAML wrong/mismatched
               deriving (Eq,Ord,Show)
 
 data TestRes
@@ -285,6 +287,8 @@ cmdRunTml args = do
 
           mInJsonDat :: Maybe [J.Value]
           mInJsonDat = (maybe (error ("invalid JSON in " ++ show fn)) id . J.decodeStrictN . T.encodeUtf8) <$> lookup "in-json" dats
+
+          mOutYamlDat = BS.L.fromStrict . T.encodeUtf8 . unescapeSpcTab <$> lookup "out-yaml" dats
 
       case sequence (parseEvents inYamlDat) of
         Left err
@@ -316,6 +320,20 @@ cmdRunTml args = do
           if evs'' == testEvDat
              then do
 
+               let outYamlDatIut = writeEvents YT.UTF8 evs'
+                   outYamlEvsIut = either (const []) (map ev2str) $ sequence $ parseEvents outYamlDatIut
+
+               unless (outYamlEvsIut == evs'') $ do
+                 putStrLn' ("\nWARNING: (iut /= ref)")
+
+                 putStrLn' ("iut[yaml] = " ++ show outYamlDatIut)
+                 putStrLn' ("ref[raw-evs] = " ++ show evs')
+                 putStrLn' ("ref[evs] = " ++ show evs'')
+                 putStrLn' ("iut[evs] = " ++ show outYamlEvsIut)
+
+                 putStrLn ""
+
+
                case mInJsonDat of
                  Nothing -> do
                    putStrLn "OK!"
@@ -325,8 +343,33 @@ cmdRunTml args = do
 
                    if iutJson == inJsonDat
                      then do
-                       putStrLn "OK! (+JSON)"
-                       pure (Pass PassEvsJson)
+                       case mOutYamlDat of
+                         Nothing -> do
+                           putStrLn "OK! (+JSON)"
+                           pure (Pass PassEvsJson)
+                         Just outYamlDat -> do
+                           case () of
+                             _ | outYamlDat == outYamlDatIut -> do
+                                   putStrLn "OK! (+JSON+YAML)"
+                                   pure (Pass PassEvsJsonYaml)
+
+                               | otherwise -> do
+
+                                   putStrLn $ if outYamlEvsIut == evs'' then "OK (+JSON-YAML)" else "FAIL! (bad out-YAML)"
+
+                                   putStrLn' ("ref = " ++ show outYamlDat)
+                                   putStrLn' ("iut = " ++ show outYamlDatIut)
+                                   putStrLn ""
+                                   putStrLn' ("ref = " ++ show evs'')
+                                   putStrLn' ("iut = " ++ show outYamlEvsIut)
+
+                                   case outYamlEvsIut == evs'' of
+                                     True -> do
+                                       putStrLn' ("(iut == ref)")
+                                       pure (Pass PassEvsJson)
+                                     False -> pure (Fail FailYaml)
+
+
                      else do
                        putStrLn "FAIL! (bad JSON)"
 
@@ -368,9 +411,9 @@ cmdRunTml args = do
 
   putStrLn $ concat
     [ "done -- passed: ", show ok
-    , " (ev: ", stat (Pass PassEvs), ", ev+json: ", stat (Pass PassEvsJson), ", err: ", stat (Pass PassExpErr), ") / "
+    , " (ev: ", stat (Pass PassEvs), ", ev+json: ", stat (Pass PassEvsJson), ", ev+json+yaml: ", stat (Pass PassEvsJsonYaml), ", err: ", stat (Pass PassExpErr), ") / "
     , "failed: ", show nok
-    , " (err: ", stat (Fail FailParse), ", ev:", stat (Fail FailEvs), ", json:", stat (Fail FailJson), ", ok:", stat (Fail FailSuccess), ")"
+    , " (err: ", stat (Fail FailParse), ", ev:", stat (Fail FailEvs), ", json:", stat (Fail FailJson), ", yaml:", stat (Fail FailYaml), ", ok:", stat (Fail FailSuccess), ")"
     ]
 
 
