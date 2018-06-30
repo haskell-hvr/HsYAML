@@ -10,76 +10,23 @@ module Data.YAML.Event
     ( parseEvents
     , EvStream
     , Event(..)
-    , Style(..)
+    , ScalarStyle(..)
+    , NodeStyle(..)
     , Tag, untagged, isUntagged, tagToText, mkTag
     , Anchor
     , Pos(..)
     ) where
 
-import qualified Data.ByteString.Lazy as BS.L
-import           Data.Char
-import qualified Data.Map             as Map
-import qualified Data.Text            as T
-import qualified Data.YAML.Token      as Y
-import           Numeric              (readHex)
+import           Data.YAML.Event.Internal
+
+import qualified Data.ByteString.Lazy     as BS.L
+import qualified Data.Char                as C
+import qualified Data.Map                 as Map
+import qualified Data.Text                as T
+import qualified Data.YAML.Token          as Y
+import           Numeric                  (readHex)
 
 import           Util
-
--- TODO: consider also non-essential attributes
-
--- | YAML Event Types
---
--- The events correspond to the ones from [LibYAML](http://pyyaml.org/wiki/LibYAML)
---
--- The grammar below defines well-formed streams of 'Event's:
---
--- @
--- stream   ::= 'StreamStart' document* 'StreamEnd'
--- document ::= 'DocumentStart' node 'DocumentEnd'
--- node     ::= 'Alias'
---            | 'Scalar'
---            | sequence
---            | mapping
--- sequence ::= 'SequenceStart' node* 'SequenceEnd'
--- mapping  ::= 'MappingStart' (node node)* 'MappingEnd'
--- @
-data Event
-    = StreamStart
-    | StreamEnd
-    | DocumentStart  !Bool
-    | DocumentEnd    !Bool
-    | Alias          !Anchor
-    | Scalar         !(Maybe Anchor)  !Tag  !Style  !Text
-    | SequenceStart  !(Maybe Anchor)  !Tag
-    | SequenceEnd
-    | MappingStart   !(Maybe Anchor)  !Tag
-    | MappingEnd
-    deriving (Show, Eq)
-
--- | YAML Anchor identifiers
-type Anchor = Text
-
--- | YAML Tags
-newtype Tag = Tag (Maybe Text)
-            deriving (Eq,Ord)
-
-instance Show Tag where
-  show (Tag x) = show x
-
--- | Convert 'Tag' to its string representation
---
--- Returns 'Nothing' for 'untagged'
-tagToText :: Tag -> Maybe T.Text
-tagToText (Tag x) = x
-
--- | An \"untagged\" YAML tag
-untagged :: Tag
-untagged = Tag Nothing
-
--- | Equivalent to @(== 'untagged')@
-isUntagged :: Tag -> Bool
-isUntagged (Tag Nothing) = True
-isUntagged _             = False
 
 -- | Construct YAML tag
 mkTag :: String -> Tag
@@ -104,31 +51,8 @@ mkTag'' "" = error "mkTag''"
 mkTag'' s  = Tag (Just $! T.pack ("tag:yaml.org,2002:" ++ s))
 
 
-
--- | Event stream produced by 'parseEvents'
---
--- A 'Left' value denotes parsing errors. The event stream ends
--- immediately once a 'Left' value is returned.
-type EvStream = [Either (Pos,String) Event]
-
--- | Position in parsed YAML source
-data Pos = Pos
-    { posByteOffset :: !Int -- ^ 0-based byte offset
-    , posCharOffset :: !Int -- ^ 0-based character (Unicode code-point) offset
-    , posLine       :: !Int -- ^ 1-based line number
-    , posColumn     :: !Int -- ^ 0-based character (Unicode code-point) column number
-    } deriving Show
-
 tok2pos :: Y.Token -> Pos
 tok2pos Y.Token { Y.tByteOffset = posByteOffset, Y.tCharOffset = posCharOffset, Y.tLine = posLine, Y.tLineChar = posColumn } = Pos {..}
-
--- | 'Scalar' node style
-data Style = Plain
-           | SingleQuoted
-           | DoubleQuoted
-           | Literal
-           | Folded
-           deriving (Eq,Ord,Show)
 
 -- internal
 type TagHandle = Text
@@ -229,10 +153,18 @@ err [] = [Left ((Pos (-1) (-1) (-1) (-1)), "Unexpected end of token stream")]
 goNode0 :: Map TagHandle Text -> Tok2EvStreamCont
 goNode0 tagmap = goNode
   where
+    seqInd "[" = Flow
+    seqInd "-" = Block
+    seqInd _   = error "seqInd: internal error" -- impossible
+
+    mapInd "{" = Flow
+    mapInd _   = error "mapInd: internal error" -- impossible
+
     goNode :: Tok2EvStreamCont
     goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar (mempty,untagged) rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginSequence } : rest) cont = Right (SequenceStart Nothing untagged) : goSeq rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart Nothing untagged) : goMap rest (flip goNodeEnd cont)
+    goNode (Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (SequenceStart Nothing untagged (seqInd ind)) : goSeq rest (flip goNodeEnd cont)
+    goNode (Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (MappingStart Nothing untagged (mapInd ind)) : goMap rest (flip goNodeEnd cont)
+    goNode (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart Nothing untagged Block) : goMap rest (flip goNodeEnd cont)
     goNode (Y.Token { Y.tCode = Y.BeginProperties } : rest) cont = goProp (mempty,untagged) rest (\p rest' -> goNode' p rest' cont)
     goNode (Y.Token { Y.tCode = Y.BeginAlias } :
             Y.Token { Y.tCode = Y.Indicator } :
@@ -244,8 +176,9 @@ goNode0 tagmap = goNode
 
     goNode' :: Props -> Tok2EvStreamCont
     goNode' props (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont   = goScalar props rest (flip goNodeEnd cont)
-    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginSequence } : rest) cont = Right (SequenceStart manchor mtag) : goSeq rest (flip goNodeEnd cont)
-    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart manchor mtag) : goMap rest (flip goNodeEnd cont)
+    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (SequenceStart manchor mtag (seqInd ind)) : goSeq rest (flip goNodeEnd cont)
+    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (MappingStart manchor mtag (mapInd ind)) : goMap rest (flip goNodeEnd cont)
+    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart manchor mtag Block) : goMap rest (flip goNodeEnd cont)
     goNode' _ xs                                            _cont = err xs
 
     goNodeEnd :: Tok2EvStreamCont
@@ -380,7 +313,7 @@ goNode0 tagmap = goNode
 
         go' ii acc sty (t@Y.Token { Y.tCode = Y.EndScalar } :
                      rest)
-          | ii, hasLeadingSpace acc = [Left (tok2pos t, "leading empty lines contain more spaces than the first non-empty line in scalar")]
+          | ii, hasLeadingSpace acc = [Left (tok2pos t, "leading empty lines contain more spaces than the first non-empty line in scalar: " ++ show acc)]
           | otherwise = Right (Scalar manchor tag sty (T.pack acc)) : cont rest
 
         go' _ _ _ xs | False = error (show xs)
@@ -393,7 +326,8 @@ goNode0 tagmap = goNode
     goSeq :: Tok2EvStreamCont
     goSeq (Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right SequenceEnd : cont rest
     goSeq (Y.Token { Y.tCode = Y.BeginNode } : rest) cont = goNode rest (flip goSeq cont)
-    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart Nothing untagged) : goMap rest (flip goSeq cont)
+    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } :  rest) cont = Right (MappingStart Nothing untagged (mapInd ind)) : goMap rest (flip goSeq cont)
+    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart Nothing untagged Block) : goMap rest (flip goSeq cont)
     goSeq (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goSeq rest cont
 --    goSeq xs _cont = error (show xs)
     goSeq xs _cont = err xs
@@ -435,21 +369,21 @@ type Cont r a = (a -> r) -> r
 -- decode 8-hex-digit unicode code-point
 decodeCP2 :: String -> Maybe Char
 decodeCP2 s = case s of
-               [_,_,_,_,_,_,_,_] | all isHexDigit s
+               [_,_,_,_,_,_,_,_] | all C.isHexDigit s
                                  , [(j, "")] <- readHex s -> Just (chr (fromInteger j))
                _ -> Nothing
 
 -- decode 4-hex-digit unicode code-point
 decodeCP :: String -> Maybe Char
 decodeCP s = case s of
-               [_,_,_,_] | all isHexDigit s
+               [_,_,_,_] | all C.isHexDigit s
                          , [(j, "")] <- readHex s -> Just (chr (fromInteger j))
                _ -> Nothing
 
 -- decode 2-hex-digit latin1 code-point
 decodeL1 :: String -> Maybe Char
 decodeL1 s = case s of
-               [_,_] | all isHexDigit s
+               [_,_] | all C.isHexDigit s
                      , [(j, "")] <- readHex s -> Just (chr (fromInteger j))
                _ -> Nothing
 

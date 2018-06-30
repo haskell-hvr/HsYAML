@@ -48,7 +48,7 @@ data Scalar = SNull            -- ^ @tag:yaml.org,2002:null@
 --
 -- A YAML schema defines how implicit tags are resolved to concrete tags and how data is represented textually in YAML.
 data SchemaResolver = SchemaResolver
-     { schemaResolverScalar   :: Tag -> YE.Style -> T.Text -> Either String Scalar
+     { schemaResolverScalar   :: Tag -> YE.ScalarStyle -> T.Text -> Either String Scalar
      , schemaResolverSequence :: Tag -> Either String Tag
      , schemaResolverMapping  :: Tag -> Either String Tag
      }
@@ -60,7 +60,7 @@ data ScalarTag = ScalarBangTag   -- ^ non-specific ! tag
 
 -- common logic for 'schemaResolverScalar'
 scalarTag :: (ScalarTag -> T.Text -> Either String Scalar)
-             -> Tag -> YE.Style -> T.Text -> Either String Scalar
+             -> Tag -> YE.ScalarStyle -> T.Text -> Either String Scalar
 scalarTag f tag sty val = f tag' val
   where
     tag' = case sty of

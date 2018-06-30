@@ -1,6 +1,8 @@
 ## 0.2.0.0
 
-TODO
+* New `NodeStyle` type denoting flow/block style
+* `Event(SequenceStart,MappingStart)` constructors now record `NodeStyle`
+* `Style` type renamed to `ScalarType`
 
 ### 0.1.1.2
 

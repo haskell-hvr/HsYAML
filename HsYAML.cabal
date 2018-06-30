@@ -47,6 +47,7 @@ library
                      , Data.YAML.Event
                      , Data.YAML.Token
   other-modules:       Data.YAML.Loader
+                     , Data.YAML.Event.Internal
                      , Data.YAML.Schema
                      , Data.YAML.Token.Encoding
                      , Util

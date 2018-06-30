@@ -33,7 +33,7 @@ type NodeId = Word
 -- | Structure defining how to construct a document tree/graph
 --
 data Loader m n = Loader
-  { yScalar   :: Tag -> YE.Style -> Text -> m (Either String n)
+  { yScalar   :: Tag -> YE.ScalarStyle -> Text -> m (Either String n)
   , ySequence :: Tag -> [n]              -> m (Either String n)
   , yMapping  :: Tag -> [(n,n)]          -> m (Either String n)
   , yAlias    :: NodeId -> Bool -> n     -> m (Either String n)
@@ -109,12 +109,12 @@ decodeLoader Loader{..} bs0 = do
           n' <- lift $ yScalar tag sty val
           returnNode manc $! n'
 
-        YE.SequenceStart manc tag -> registerAnchor manc $ do
+        YE.SequenceStart manc tag _ -> registerAnchor manc $ do
           ns <- manyUnless (== YE.SequenceEnd) goNode
           exitAnchor manc
           liftEither =<< (lift $ ySequence tag ns)
 
-        YE.MappingStart manc tag -> registerAnchor manc $ do
+        YE.MappingStart manc tag _ -> registerAnchor manc $ do
           kvs <- manyUnless (== YE.MappingEnd) (liftM2 (,) goNode goNode)
           exitAnchor manc
           liftEither =<< (lift $ yMapping tag kvs)

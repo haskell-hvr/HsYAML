@@ -22,6 +22,7 @@ module Data.YAML.Token
   ( tokenize
   , Token(..)
   , Code(..)
+  , Encoding(..)
   ) where
 
 import qualified Data.ByteString.Lazy.Char8 as BLC
