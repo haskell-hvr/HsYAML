@@ -443,8 +443,8 @@ putStrLn' msg = putStrLn ("  " ++ msg)
 ev2str :: Bool -> Event -> String
 ev2str withColSty = \case
     StreamStart                 -> "+STR"
-    DocumentStart True          -> "+DOC ---"
-    DocumentStart False         -> "+DOC"
+    DocumentStart NoDirEndMarker-> "+DOC"
+    DocumentStart _             -> "+DOC ---"
     MappingEnd                  -> "-MAP"
     (MappingStart manc mtag Flow)
       | withColSty              -> "+MAP {}" ++ ancTagStr manc mtag

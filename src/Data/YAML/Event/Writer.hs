@@ -74,7 +74,10 @@ writeEventsText (StreamStart:xs) = T.B.toLazyText $ goStream xs (error "writeEve
     goStream [StreamEnd] _ = mempty
     goStream (StreamEnd : _ : rest) _cont = error "writeEvents: events after StreamEnd"
     goStream (DocumentStart marker : rest) cont
-      = (if marker then "---" else mempty) <> putNode marker rest (\zs -> goDoc zs cont)
+      = case marker of
+          NoDirEndMarker         -> putNode False rest (\zs -> goDoc zs cont)
+          DirEndMarkerNoVersion  -> "---" <> putNode True rest (\zs -> goDoc zs cont)
+          DirEndMarkerVersion mi -> "%YAML 1." <> (T.B.fromString (show mi)) <> "\n---" <> putNode True rest (\zs -> goDoc zs cont)
     goStream (x:_) _cont = error ("writeEvents: unexpected " ++ show x ++ " (expected DocumentStart or StreamEnd)")
     goStream [] _cont = error ("writeEvents: unexpected end of stream (expected DocumentStart or StreamEnd)")
 

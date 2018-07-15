@@ -5,6 +5,9 @@
     * `Event(SequenceStart,MappingStart)` constructors now record `NodeStyle`
     * `Style` type renamed to `ScalarType`
     * New `writeEvents` and `writeEventsText` function
+    * `Event(DocumentStart)` now records YAML directive
+    * Event parser now rejects duplicate/unsupported YAML/TAG
+      directives as mandated by the YAML 1.2 specification
 
 * Make `decode`, `decodeStrict`, `decodeNode`, and `decodeNode'` treat
   duplicate keys (under the respective YAML schema) in YAML mappings

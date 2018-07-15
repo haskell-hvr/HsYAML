@@ -7,6 +7,7 @@
 module Data.YAML.Event.Internal
     ( EvStream
     , Event(..)
+    , Directives(..)
     , ScalarStyle(..)
     , NodeStyle(..)
     , scalarNodeStyle
@@ -44,7 +45,7 @@ import           Util
 data Event
     = StreamStart
     | StreamEnd
-    | DocumentStart  !Bool
+    | DocumentStart  !Directives
     | DocumentEnd    !Bool
     | Alias          !Anchor
     | Scalar         !(Maybe Anchor)  !Tag  !ScalarStyle  !Text
@@ -53,6 +54,14 @@ data Event
     | MappingStart   !(Maybe Anchor)  !Tag  !NodeStyle
     | MappingEnd
     deriving (Show, Eq)
+
+-- | Encodes document @%YAML@ directives and the directives end-marker
+--
+-- @since 0.2.0
+data Directives = NoDirEndMarker    -- ^ no directives and also no @---@ marker
+                | DirEndMarkerNoVersion -- ^ @---@ marker present, but no explicit @%YAML@ directive present
+                | DirEndMarkerVersion !Word -- ^ @---@ marker present, as well as a @%YAML 1.mi@ version directive; the minor version @mi@ is stored in the 'Word' field.
+                deriving (Show, Eq)
 
 -- | 'Scalar'-specific node style
 --

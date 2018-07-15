@@ -12,6 +12,7 @@ module Data.YAML.Event
     , writeEventsText
     , EvStream
     , Event(..)
+    , Directives(..)
     , ScalarStyle(..)
     , NodeStyle(..)
     , Tag, untagged, isUntagged, tagToText, mkTag
@@ -98,7 +99,7 @@ getUriTag toks0 = do
 -- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
 -- (which will be auto-detected).
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
+parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -114,38 +115,70 @@ parseEvents = \bs0 -> Right StreamStart : (go0 mempty $ stripComments $ filter (
     isWhite (Y.Token { Y.tCode = Y.Break })  = True
     isWhite _                                = False
 
-    goDir :: Map TagHandle Text -> [Y.Token] -> EvStream
-    goDir m (Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
-             Y.Token { Y.tCode = Y.Meta, Y.tText = "YAML" } :
-             Y.Token { Y.tCode = Y.Meta } :
-             Y.Token { Y.tCode = Y.EndDirective } :
-             rest) = go0 m rest
 
-    goDir m (Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
-             Y.Token { Y.tCode = Y.Meta, Y.tText = "TAG" } :
-             rest)
+    go0 :: Tok2EvStream
+    go0 []                                                = [Right StreamEnd]
+    go0 toks0@(Y.Token { Y.tCode = Y.BeginDocument } : _) = go1 dinfo0 toks0
+    go0 (Y.Token { Y.tCode = Y.DocumentEnd } : rest)      = go0 rest -- stray/redundant document-end markers cause this
+    go0 xs                                                = err xs
+
+
+    go1 :: DInfo -> Tok2EvStream
+    go1 m (Y.Token { Y.tCode = Y.BeginDocument } : rest) = goDirs m rest
+    go1 _ (Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = Right (DocumentEnd True) : go0 rest
+    go1 _ (Y.Token { Y.tCode = Y.EndDocument } : rest) = Right (DocumentEnd False) : go0 rest
+    go1 m (Y.Token { Y.tCode = Y.BeginNode } : rest) = goNode0 m rest (go1 m)
+    go1 _ xs = err xs
+
+    -- consume {Begin,End}Directives and emit DocumentStart event
+    goDirs :: DInfo -> Tok2EvStream
+    goDirs m (Y.Token { Y.tCode = Y.BeginDirective } : rest) = goDir1 m rest
+    goDirs m (Y.Token { Y.tCode = Y.DirectivesEnd } : rest)
+      | Just (1,mi) <- diVer m = Right (DocumentStart (DirEndMarkerVersion mi)) : go1 m rest
+      | otherwise              = Right (DocumentStart DirEndMarkerNoVersion) : go1 m rest
+    goDirs _ xs@(Y.Token { Y.tCode = Y.BeginDocument } : _) = err xs
+    goDirs m xs = Right (DocumentStart NoDirEndMarker) : go1 m xs
+
+    -- single directive
+    goDir1 :: DInfo -> [Y.Token] -> EvStream
+    goDir1 m toks0@(Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
+                    Y.Token { Y.tCode = Y.Meta, Y.tText = "YAML" } :
+                    Y.Token { Y.tCode = Y.Meta, Y.tText = v } :
+                    Y.Token { Y.tCode = Y.EndDirective } :
+                    rest)
+      | diVer m /= Nothing = errMsg "Multiple %YAML directives" toks0
+      | Just (1,mi) <- decodeVer v = goDirs (m { diVer = Just (1,mi) }) rest -- TODO: warn for non-1.2
+      | otherwise = errMsg ("Unsupported YAML version " <> show v) toks0
+
+    goDir1 m toks0@(Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
+                    Y.Token { Y.tCode = Y.Meta, Y.tText = "TAG" } :
+                    rest)
       | Just (h, rest') <- getHandle rest
-      , Just (t, rest'') <- getUriTag rest' = go0 (Map.insert h t m) (skipPast Y.EndDirective rest'')
+      , Just (t, rest'') <- getUriTag rest' = case mapInsertNoDupe h t (diTags m) of
+                                                Just tm  -> goDirs (m { diTags = tm }) (skipPast Y.EndDirective rest'')
+                                                Nothing  -> errMsg ("Multiple %TAG definitions for handle " <> show h) toks0
 
-    goDir m (Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
+    goDir1 m (Y.Token { Y.tCode = Y.Indicator, Y.tText = "%" } :
              Y.Token { Y.tCode = Y.Meta, Y.tText = l } :
-             rest) | l `notElem` ["TAG","YAML"] = go0 m (skipPast Y.EndDirective rest)
-    goDir _ xs                                            = err xs
+             rest) | l `notElem` ["TAG","YAML"] = goDirs m (skipPast Y.EndDirective rest)
+    goDir1 _ xs                                            = err xs
 
-    go0 :: Map.Map TagHandle Text -> Tok2EvStream
-    go0 _ [] = [Right StreamEnd]
-    go0 _ (Y.Token { Y.tCode = Y.White } : _) = error "the impossible happened"
-    go0 m (Y.Token { Y.tCode = Y.Indicator } : rest) = go0 m rest -- ignore indicators here
-    go0 m (Y.Token { Y.tCode = Y.DirectivesEnd } : rest) = go0 m rest
-    go0 m (Y.Token { Y.tCode = Y.BeginDocument } : Y.Token { Y.tCode = Y.DirectivesEnd } : rest) = Right (DocumentStart True) : go0 m rest -- hack
-    go0 m (Y.Token { Y.tCode = Y.BeginDocument } : rest@(Y.Token { Y.tCode = Y.BeginDirective } : _)) = Right (DocumentStart True) : go0 m rest -- hack
-    go0 m (Y.Token { Y.tCode = Y.BeginDocument } : rest) = Right (DocumentStart False) : go0 m rest
-    go0 _ (Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = Right (DocumentEnd True) : go0 mempty rest
-    go0 _ (Y.Token { Y.tCode = Y.EndDocument } : rest) = Right (DocumentEnd False) : go0 mempty rest
-    go0 m (Y.Token { Y.tCode = Y.DocumentEnd } : rest) = go0 m rest -- should not occur
-    go0 m (Y.Token { Y.tCode = Y.BeginNode } : rest) = goNode0 m rest (go0 m)
-    go0 m (Y.Token { Y.tCode = Y.BeginDirective } : rest) = goDir m rest
-    go0 _ xs = err xs
+    -- | Decode versions of the form @<major>.<minor>@
+    decodeVer :: String -> Maybe (Word,Word)
+    decodeVer s = do
+      (lhs,'.':rhs) <- Just (break (=='.') s)
+      (,) <$> readMaybe lhs <*> readMaybe rhs
+
+data DInfo = DInfo { diTags :: Map.Map TagHandle Text
+                   , diVer  :: Maybe (Word,Word)
+                   }
+
+dinfo0 :: DInfo
+dinfo0 = DInfo mempty Nothing
+
+errMsg :: String -> Tok2EvStream
+errMsg msg (tok : _) = [Left (tok2pos tok, msg)]
+errMsg msg [] = [Left ((Pos (-1) (-1) (-1) (-1)), ("Unexpected end of token stream: " <> msg))]
 
 err :: Tok2EvStream
 err (tok@Y.Token { Y.tCode = Y.Error, Y.tText = msg } : _) = [Left (tok2pos tok, msg)]
@@ -153,8 +186,8 @@ err (tok@Y.Token { Y.tCode = Y.Unparsed, Y.tText = txt } : _) = [Left (tok2pos t
 err (tok@Y.Token { Y.tCode = code } : _) = [Left (tok2pos tok, ("Parse failure near " ++ show code ++ " token"))]
 err [] = [Left ((Pos (-1) (-1) (-1) (-1)), "Unexpected end of token stream")]
 
-goNode0 :: Map TagHandle Text -> Tok2EvStreamCont
-goNode0 tagmap = goNode
+goNode0 :: DInfo -> Tok2EvStreamCont
+goNode0 DInfo {..} = goNode
   where
     seqInd "[" = Flow
     seqInd "-" = Block
@@ -213,7 +246,7 @@ goNode0 tagmap = goNode
                       Y.Token { Y.tCode = Y.Meta, Y.tText = tag } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
           cont
-            | Just t' <- Map.lookup (T.pack ("!!")) tagmap
+            | Just t' <- Map.lookup (T.pack ("!!")) diTags
               = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
             | otherwise = cont (anchor,mkTag'' tag) rest
 
@@ -232,7 +265,7 @@ goNode0 tagmap = goNode
                       Y.Token { Y.tCode = Y.Meta, Y.tText = tag } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
           cont
-            | Just t' <- Map.lookup (T.pack ("!" ++ h ++ "!")) tagmap
+            | Just t' <- Map.lookup (T.pack ("!" ++ h ++ "!")) diTags
               = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
             | otherwise = err xs
 
@@ -242,7 +275,7 @@ goNode0 tagmap = goNode
                       Y.Token { Y.tCode = Y.Meta, Y.tText = tag } :
                       Y.Token { Y.tCode = Y.EndTag } : rest)
           cont
-            | Just t' <- Map.lookup (T.pack ("!")) tagmap
+            | Just t' <- Map.lookup (T.pack ("!")) diTags
               = cont (anchor,mkTag (T.unpack t' ++ tag)) rest
             | otherwise = cont (anchor,mkTag' ('!' : tag)) rest -- unresolved
     goTag _ xs _ = err xs

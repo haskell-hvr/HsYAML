@@ -17,6 +17,7 @@ module Util
     , (<>)
 
     , mapFromListNoDupes
+    , mapInsertNoDupe
 
     , module X
     ) where
