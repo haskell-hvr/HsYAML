@@ -339,7 +339,7 @@ withFloat expected _ v                   = typeMismatch expected v
 instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
   parseYAML = withMap "!!map" $ \xs -> Map.fromList <$> mapM (\(a,b) -> (,) <$> parseYAML a <*> parseYAML b) (Map.toList xs)
 
--- | Operate on @tag:yaml.org,2002:seq@ node (or fail)
+-- | Operate on @tag:yaml.org,2002:map@ node (or fail)
 withMap :: String -> (Mapping -> Parser a) -> Node -> Parser a
 withMap _        f (Mapping tag xs)
   | tag == tagMap    = f xs
