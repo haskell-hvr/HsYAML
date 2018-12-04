@@ -54,7 +54,9 @@ module Data.YAML
     (
       -- * Typeclass-based resolving/decoding
       decode
+    , decode1
     , decodeStrict
+    , decode1Strict
     , FromYAML(..)
     , Parser
     , parseEither
@@ -97,6 +99,7 @@ import qualified Control.Monad.Fail   as Fail
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map             as Map
+import           Data.Maybe           (listToMaybe)
 import qualified Data.Text            as T
 
 import           Data.YAML.Event      (Tag, isUntagged, tagToText)
@@ -453,8 +456,36 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 decode :: FromYAML v => BS.L.ByteString -> Either String [v]
 decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
+-- | Convenience wrapper over 'decode' expecting exactly one YAML document
+--
+-- >>> decode1 "---\nBar\n..." :: Either String Text
+-- Right "Bar"
+--
+-- >>> decode1 "Foo\n---\nBar" :: Either String Text
+-- Left "unexpected multiple YAML documents"
+--
+-- >>> decode1 "# Just a comment" :: Either String Text
+-- Left "empty YAML stream"
+--
+-- @since 0.1.2.0
+decode1 :: FromYAML v => BS.L.ByteString -> Either String v
+decode1 text = do
+  vs <- decode text
+  case vs of
+    []  -> Left "empty YAML stream"
+    [v] -> Right v
+    _   -> Left "unexpected multiple YAML documents"
+
 -- | Like 'decode' but takes a strict 'BS.ByteString'
 --
 -- @since 0.1.1.0
 decodeStrict :: FromYAML v => BS.ByteString -> Either String [v]
 decodeStrict = decode . BS.L.fromChunks . (:[])
+
+-- | Like 'decode1' but takes a strict 'BS.ByteString'
+--
+-- @since 0.1.2.0
+decode1Strict :: FromYAML v => BS.ByteString -> Either String v
+decode1Strict text = do
+  vs <- decodeStrict text
+  maybe (Left "expected unique") Right $ listToMaybe vs
