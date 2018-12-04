@@ -98,7 +98,6 @@ module Data.YAML
 import qualified Control.Monad.Fail   as Fail
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BS.L
-import           Data.List.NonEmpty   (NonEmpty, nonEmpty)
 import qualified Data.Map             as Map
 import           Data.Maybe           (listToMaybe)
 import qualified Data.Text            as T
@@ -356,9 +355,6 @@ withMap expected _ v = typeMismatch expected v
 
 instance FromYAML v => FromYAML [v] where
   parseYAML = withSeq "!!seq" (mapM parseYAML)
-
-instance FromYAML v => FromYAML (NonEmpty v) where
-  parseYAML n = (maybe (fail "empty") pure) =<< nonEmpty <$> parseYAML n
 
 -- | Operate on @tag:yaml.org,2002:seq@ node (or fail)
 withSeq :: String -> ([Node] -> Parser a) -> Node -> Parser a
