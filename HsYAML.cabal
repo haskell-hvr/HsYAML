@@ -1,4 +1,4 @@
-cabal-version:       1.14
+cabal-version:       1.14.0.1
 name:                HsYAML
 version:             0.2.0.0
 
@@ -67,7 +67,7 @@ library
                        Trustworthy
                        TypeSynonymInstances
 
-  build-depends:       base         >=4.5   && <4.12
+  build-depends:       base         >=4.5   && <4.13
                      , bytestring   >=0.9   && <0.11
                      , dlist        >=0.8   && <0.9
                      , containers   >=0.4.2 && <0.6
