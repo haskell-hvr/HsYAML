@@ -14,7 +14,7 @@ copyright:           2015-2018 Herbert Valerio Riedel
                    , 2007-2008 Oren Ben-Kiki
 category:            Text
 build-type:          Simple
-tested-with:         GHC==8.4.3, GHC==8.4.1, GHC==8.2.2, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3, GHC==7.4.2
+tested-with:         GHC==8.6.1, GHC==8.4.3, GHC==8.4.1, GHC==8.2.2, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3, GHC==7.4.2
 
 description:
   @HsYAML@ is a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) parser implementation for Haskell.
@@ -52,6 +52,7 @@ library
                      , Data.YAML.Schema
                      , Data.YAML.Token.Encoding
                      , Util
+                     , Data.DList
 
   default-language:    Haskell2010
   other-extensions:    FlexibleContexts
@@ -69,7 +70,6 @@ library
 
   build-depends:       base         >=4.5   && <4.12
                      , bytestring   >=0.9   && <0.11
-                     , dlist        >=0.8   && <0.9
                      , containers   >=0.4.2 && <0.6
                      , text         >=1.2.3 && <1.3
                      , mtl          >=2.2.1 && <2.3
