@@ -270,7 +270,7 @@ jsonDecodeFloat = either (const Nothing) Just . parse float ""
       p3 <- option "" $ do
         void (char 'e' P.<|> char 'E')
         s <- option "" (("-" <$ char '-') P.<|> ("" <$ char '+'))
-        d <- P.many digit
+        d <- P.many1 digit
 
         pure ("e" ++ s ++ d)
 
