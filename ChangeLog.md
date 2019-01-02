@@ -16,6 +16,10 @@
 
 ---
 
+### 0.1.1.3
+
+* Fix bug in float regexp being too lax in the JSON and Core schema ([#7](https://github.com/hvr/HsYAML/issues/7))
+
 ### 0.1.1.2
 
 * Tolerate BOM at *each* `l-document-prefix` (rather than only at the first one encountered in a YAML stream)
