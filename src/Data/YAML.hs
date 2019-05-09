@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE Safe              #-}
+{-# LANGUAGE CPP               #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -214,7 +215,9 @@ instance Monad Parser where
   return = pure
   P m >>= k = P (m >>= unP . k)
   (>>) = (*>)
+#if !(MIN_VERSION_base(4,13,0))
   fail = Fail.fail
+#endif
 
 -- | @since 0.1.1.0
 instance Fail.MonadFail Parser where
