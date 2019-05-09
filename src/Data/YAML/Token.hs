@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE PostfixOperators       #-}
 {-# LANGUAGE Safe                   #-}
+{-# LANGUAGE CPP                    #-}
 
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
@@ -32,6 +33,9 @@ import           Data.YAML.Token.Encoding   (Encoding (..), decode)
 
 import           Util                       hiding (empty)
 import qualified Util
+#if MIN_VERSION_base(4,13,0)
+import qualified Control.Monad.Fail as Fail
+#endif
 
 -- * Generic operators
 --
@@ -447,6 +451,9 @@ instance Monad Parser where
 
   (>>) = (*>)
 
+#if MIN_VERSION_base(4,13,0)
+instance Fail.MonadFail Parser where
+#endif
   -- @fail message@ does just that - fails with a /message/.
   fail message = Parser $ \state -> failReply state message
 
