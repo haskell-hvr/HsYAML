@@ -447,8 +447,9 @@ instance Monad Parser where
 
   (>>) = (*>)
 
-  -- @fail message@ does just that - fails with a /message/.
-  fail message = Parser $ \state -> failReply state message
+-- | @fail message@ does just that - fails with a /message/.
+pfail :: String -> Parser a
+pfail message = Parser $ \state -> failReply state message
 
 -- ** Parsing operators
 --
@@ -496,7 +497,7 @@ parser % n
 -- | @parser <% n@ matches fewer than /n/ occurrences of /parser/.
 (<%) :: (Match match result) => match -> Int -> Pattern
 parser <% n
-  | n < 1 = fail "Fewer than 0 repetitions"
+  | n < 1 = pfail "Fewer than 0 repetitions"
   | n == 1 = reject parser Nothing
   | n > 1  = DeLess ^ ( ((parser ! DeLess) *> (parser <% n .- 1)) <|> empty )
 
@@ -582,7 +583,7 @@ first / second = Parser $ applyParser (match first <|> match second)
 -- | @first <|> second@ tries to parse /first/, and failing that parses
 -- /second/, unless /first/ has committed in which case is fails immediately.
 instance Alternative Parser where
-  empty = fail "empty"
+  empty = pfail "empty"
 
   left <|> right = Parser $ \state -> decideParser state D.empty left right state
     where
@@ -902,7 +903,7 @@ prefixErrorWith pattern prefix =
     in case reply^.rResult of
          Result _       -> reply
          More more      -> reply { rResult = More $ prefixErrorWith more prefix }
-         Failed message -> reply { rResult = More $ prefix & (fail message :: Parser result) }
+         Failed message -> reply { rResult = More $ prefix & (pfail message :: Parser result) }
 
 -- * Production parameters
 
