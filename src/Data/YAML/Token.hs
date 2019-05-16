@@ -1406,18 +1406,19 @@ nb_single_multi_line n  {- 125 -} = nb_ns_single_in_line
 -- 7.3.3 Plain Style
 
 ns_plain_first _c  {- 126 -} = ns_char - c_indicator
-                            / ( ':' / '?' / '-' ) & ( ns_char >?)
+                            / ( ':' / '?' / '-' ) & ( (ns_plain_safe _c) >?)
 
 ns_plain_safe c   {- 127 -} = case c of
                                    FlowOut  -> ns_plain_safe_out
                                    FlowIn   -> ns_plain_safe_in
                                    BlockKey -> ns_plain_safe_out
                                    FlowKey  -> ns_plain_safe_in
-ns_plain_safe_out {- 128 -} = ns_char - c_mapping_value - c_comment
-ns_plain_safe_in  {- 129 -} = ns_plain_safe_out - c_flow_indicator
-ns_plain_char c   {- 130 -} = ns_plain_safe c
+                                   
+ns_plain_safe_out {- 128 -} = ns_char
+ns_plain_safe_in  {- 129 -} = ns_char - c_flow_indicator
+ns_plain_char c   {- 130 -} = ns_plain_safe c - ':' - '#'
                             / ( ns_char <?) & '#'
-                            / ':' & ( ns_char >?)
+                            / ':' & ( (ns_plain_safe c) >?)
 
 ns_plain n c          {- 131 -} = wrapTokens BeginScalar EndScalar
                                 $ text (case c of
@@ -1481,7 +1482,7 @@ ns_flow_map_yaml_key_entry n c {- 145 -}    = ( DeNode ^ ns_flow_yaml_node n c )
 c_ns_flow_map_empty_key_entry n c {- 146 -} = e_node
                                             & c_ns_flow_map_separate_value n c
 
-c_ns_flow_map_separate_value n c {- 147 -}  = c_mapping_value & ( ns_char >!) ! DePair
+c_ns_flow_map_separate_value n c {- 147 -}  = c_mapping_value & ( (ns_plain_safe c) >!) ! DePair
                                             & ( ( s_separate n c & ns_flow_node n c )
                                               / e_node )
 
