@@ -1,6 +1,7 @@
 cabal-version:       1.14
+build-type:          Simple
 name:                HsYAML
-version:             0.1.1.3
+version:             0.1.2.0
 
 synopsis:            Pure Haskell YAML 1.2 parser
 homepage:            https://github.com/hvr/HsYAML
@@ -13,7 +14,6 @@ maintainer:          hvr@gnu.org
 copyright:           2015-2018 Herbert Valerio Riedel
                    , 2007-2008 Oren Ben-Kiki
 category:            Text
-build-type:          Simple
 tested-with:         GHC==8.6.1, GHC==8.4.3, GHC==8.4.1, GHC==8.2.2, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3, GHC==7.4.2
 
 description:

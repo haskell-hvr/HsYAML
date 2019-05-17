@@ -1,15 +1,22 @@
-### 0.1.1.3
+See also http://pvp.haskell.org/faq
+
+### 0.1.2.0
+
+* Add convenience functions `decode1` and `decode1Strict` expecting exactly one YAML document  ([#5](https://github.com/haskell-hvr/HsYAML/pull/5))
+* Fix a couple corner-cases in the YAML tokenization ([#10](https://github.com/haskell-hvr/HsYAML/pull/10))
+
+#### 0.1.1.3
 
 * Fix bug in float regexp being too lax in the JSON and Core schema ([#7](https://github.com/hvr/HsYAML/issues/7))
 * Remove dependency on `dlist`
 
-### 0.1.1.2
+#### 0.1.1.2
 
 * Tolerate BOM at *each* `l-document-prefix` (rather than only at the first one encountered in a YAML stream)
 * Workaround broken `mtl-2.2.2` bundled in GHC 8.4.1 ([#1](https://github.com/hvr/HsYAML/issues/1))
 * Relax to GPL-2.0-or-later
 
-### 0.1.1.1
+#### 0.1.1.1
 
 * Reject (illegal) non-scalar code-points in UTF-32 streams
 * Tolerate BOM at start of stream
