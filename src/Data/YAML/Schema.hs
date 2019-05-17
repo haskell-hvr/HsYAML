@@ -133,7 +133,7 @@ jsonSchemaResolver = SchemaResolver{..}
       | isUntagged t = Right tagSeq
       | otherwise    = Right t
 
--- | Core JSON schema resolver as specified
+-- | Core schema resolver as specified
 -- in [YAML 1.2 / 10.3.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2805071)
 coreSchemaResolver :: SchemaResolver
 coreSchemaResolver = SchemaResolver{..}
