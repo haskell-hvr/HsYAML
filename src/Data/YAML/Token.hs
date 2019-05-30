@@ -1482,9 +1482,9 @@ ns_flow_map_explicit_entry n c {- 143 -} = ns_flow_map_implicit_entry n c
                                            & e_node )
 
 ns_flow_map_implicit_entry n c {- 144 -}    = DePair
-                                            ^ ( ns_flow_map_yaml_key_entry n c
-                                              / c_ns_flow_map_empty_key_entry n c
-                                              / c_ns_flow_map_json_key_entry n c )
+                                            ^ ( c_ns_flow_map_json_key_entry n c
+                                              / ns_flow_map_yaml_key_entry n c
+                                              / c_ns_flow_map_empty_key_entry n c )
 ns_flow_map_yaml_key_entry n c {- 145 -}    = ( DeNode ^ ns_flow_yaml_node n c ) ! DePair
                                             & ( ( ( s_separate n c ?)
                                                 & c_ns_flow_map_separate_value n c )
