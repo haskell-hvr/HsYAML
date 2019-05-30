@@ -1,5 +1,9 @@
 See also http://pvp.haskell.org/faq
 
+### *TBD*
+
+* Fix X38W testcase ([#13](https://github.com/haskell-hvr/HsYAML/issues/13), [#14](https://github.com/haskell-hvr/HsYAML/pull/14))
+
 ### 0.1.2.0
 
 * Add convenience functions `decode1` and `decode1Strict` expecting exactly one YAML document  ([#5](https://github.com/haskell-hvr/HsYAML/pull/5))
