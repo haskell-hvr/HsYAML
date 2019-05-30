@@ -286,12 +286,12 @@ goNode0 DInfo {..} = goNode
         go0 ii sty (Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest)
           | "'"  <- ind = go' ii "" SingleQuoted rest
           | "\"" <- ind = go' ii "" DoubleQuoted rest
-          | "|"  <- ind = go0 True Literal rest
-          | ">"  <- ind = go0 True Folded rest
+          | "|"  <- ind = go0 True (Literal Clip (toEnum 0)) rest
+          | ">"  <- ind = go0 True (Folded Clip (toEnum 0)) rest
 
-          | "+"  <- ind = go0 ii sty rest
-          | "-"  <- ind = go0 ii sty rest
-          | [c]  <- ind, '1' <= c, c <= '9' = go0 False sty rest
+          | "+"  <- ind = go0 ii (chn sty Keep) rest
+          | "-"  <- ind = go0 ii (chn sty Strip) rest
+          | [c]  <- ind, '1' <= c, c <= '9' = go0 False (chn' sty (C.digitToInt c)) rest
 
         go0 ii sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest)      = go' ii t sty rest
         go0 ii sty (Y.Token { Y.tCode = Y.LineFold } : rest)               = go' ii " " sty rest
@@ -299,6 +299,13 @@ goNode0 DInfo {..} = goNode
         go0 _  sty (Y.Token { Y.tCode = Y.EndScalar } : rest)              = Right (Scalar manchor tag sty mempty) : cont rest
 
         go0 _ _ xs = err xs
+
+        chn (Literal _ digit) chmp = Literal chmp digit
+        chn (Folded _ digit) chmp = Folded chmp digit
+        chn _ _ = error "impossible"
+        chn' (Literal b _) digit = Literal b (toEnum digit)
+        chn' (Folded b _) digit = Folded b (toEnum digit)
+        chn' _ _ = error "impossible"
 
         ----------------------------------------------------------------------------
 

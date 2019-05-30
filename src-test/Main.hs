@@ -462,8 +462,8 @@ ev2str withColSty = \case
     styStr = \case
            Plain        -> " :"
            DoubleQuoted -> " \""
-           Literal      -> " |"
-           Folded       -> " >"
+           Literal _ _  -> " |"
+           Folded  _ _  -> " >"
            SingleQuoted -> " '"
 
     ancTagStr manc mtag = anc' ++ tag'

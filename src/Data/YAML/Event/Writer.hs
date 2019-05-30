@@ -129,7 +129,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         Alias a                      -> pfx <> goAlias c a (cont rest)
 
         _ -> error ("putNode: expected node-start event instead of " ++ show t)
-      where
+      where -- TODO flow
         pfx | sol           = mempty
             | BlockKey <- c = mempty
             | otherwise     = T.B.singleton ' '
@@ -192,8 +192,8 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
 
       Plain -- empty scalars
         | t == "", Nothing <- anc, Tag Nothing <- tag -> contEol -- not even node properties
-        | sol, t == "" -> anchorTag0            anc tag (if c == BlockKey then ws <> cont else contEol)
-        | t == "", BlockKey <- c   -> anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol)
+        | sol, t == "" ->             anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol)
+        | t == "", BlockKey <- c   -> anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol) -- unnecessary if 
         | t == ""      -> anchorTag'' (Left ws) anc tag contEol
 
       Plain           -> pfx $
@@ -208,23 +208,19 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
 
       DoubleQuoted    -> pfx $ T.B.singleton '"'  <> T.B.fromText (escapeDQ t) <> T.B.singleton '"'  <> contEol
 
-      -- block-style
-      Folded  --- FIXME/TODO: T.lines eats trailing whitespace; check this works out properly!
-        | T.null t                -> pfx $ ">" <> eol <> cont
-        | hasLeadSpace t          -> pfx $ (if T.last t == '\n' then ">2" else ">2-") <> g (insFoldNls' $ T.lines t) cont
-        | T.last t == '\n'        -> pfx $ T.B.singleton '>'  <> g (insFoldNls' $ T.lines t) cont
-        | otherwise               -> pfx $ ">-"               <> g (insFoldNls' $ T.lines t) cont
+      -- block style
+      Folded chm iden -> pfx $ ">" <> goChomp chm <> goDigit iden <> g (insFoldNls' $ T.lines t) (fromEnum iden) cont
 
-      Literal -- TODO: indent-indicator for leading space payloads
-        | T.null t                -> pfx $ "|" <> eol <> cont
-        | "\n" == t               -> pfx $ "|+"              <> g (T.lines t) cont
-        | hasLeadSpace t          -> pfx $ "|2"              <> g (T.lines t) cont
-        | "\n\n" `T.isSuffixOf` t -> pfx $ "|+"              <> g (T.lines t) cont
-        | "\n"   `T.isSuffixOf` t -> pfx $ T.B.singleton '|' <> g (T.lines t) cont
-        | otherwise               -> pfx $ "|-"              <> g (T.lines t) cont
+      Literal chm iden -> pfx $ "|" <> goChomp chm <> goDigit iden <> g (T.lines t) (fromEnum iden) cont
 
       where
-        hasLeadSpace t' = T.isPrefixOf " " . T.dropWhile (== '\n') $ t'
+        goDigit iden = let ch = C.intToDigit.fromEnum $ iden
+                       in if(ch == '0') then mempty else T.B.singleton ch
+
+        goChomp chm = case chm of
+           Strip -> T.B.singleton '-'
+           Clip -> mempty
+           Keep -> T.B.singleton '+'
 
         pfx cont' = (if sol || c == BlockKey then mempty else ws) <> anchorTag'' (Right ws) anc tag cont'
 
@@ -236,10 +232,11 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
           | doEol     = eol <> cont
           | otherwise = cont
 
-        g []     cont' = eol <> cont'
-        g (x:xs) cont'
-          | T.null x   = eol <> g xs cont'
-          | otherwise  = eol <> mkInd n <> T.B.fromText x <> g xs cont'
+        g []     _ cont' = eol <> cont'
+        g (x:xs) dig cont'
+          | T.null x   = eol <> g xs dig cont'
+          | dig == 0   = eol <> mkInd (n) <> T.B.fromText x <> g xs dig cont'
+          | otherwise  = eol <> mkInd (n-1) <> mkInd' dig <> T.B.fromText x <> g xs dig cont'
 
         g' []     cont' = cont'
         g' (x:xs) cont' = eol <> mkInd (n+1) <> T.B.fromText x <> g' xs cont'
@@ -251,8 +248,8 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
 
 
     isSmallKey (Alias _ : _)              = True
-    isSmallKey (Scalar _ _ Folded _ : _)  = False
-    isSmallKey (Scalar _ _ Literal _ : _) = False
+    isSmallKey (Scalar _ _ (Folded _ _) _: _)  = False
+    isSmallKey (Scalar _ _ (Literal _ _) _: _) = False
     isSmallKey (Scalar _ _ _ _ : _)       = True
     isSmallKey (SequenceStart _ _ _ : _)  = False
     isSmallKey (MappingStart _ _ _ : _)   = False
@@ -290,6 +287,17 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
       | l < 0     = error (show l)
       | otherwise = T.B.fromText (T.replicate l "  ")
 
+    mkInd' 0    = mempty
+    mkInd' 1 = " "
+    mkInd' 2 = "  "
+    mkInd' 3 = "   "
+    mkInd' 4 = "    "
+    mkInd' 5 = "     "
+    mkInd' 6 = "      "
+    mkInd' 7 = "       "
+    mkInd' 8 = "        "
+    mkInd' 9 = "         "
+    mkInd' l = error ("Impossible Indentation-level" ++ show l)
 
     eol = T.B.singleton '\n'
     ws  = T.B.singleton ' '
@@ -342,8 +350,8 @@ escapes =
 -- FIXME: check single-quoted strings with leading '\n' or trailing '\n's
 insFoldNls :: [Text] -> [Text]
 insFoldNls [] = []
-insFoldNls (z:zs)
-  | all T.null (z:zs) = "" : z : zs -- HACK
+insFoldNls z0@(z:zs)
+  | all T.null z0     = "" : z0 -- HACK
   | otherwise         = z : go zs
   where
     go [] = []

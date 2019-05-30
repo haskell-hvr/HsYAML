@@ -9,6 +9,8 @@ module Data.YAML.Event.Internal
     , Event(..)
     , Directives(..)
     , ScalarStyle(..)
+    , Chomp(..)
+    , IndentOfs(..)
     , NodeStyle(..)
     , scalarNodeStyle
     , Tag(..), untagged, isUntagged, tagToText
@@ -72,9 +74,17 @@ data Directives = NoDirEndMarker    -- ^ no directives and also no @---@ marker
 data ScalarStyle = Plain
                  | SingleQuoted
                  | DoubleQuoted
-                 | Literal
-                 | Folded
+                 | Literal !Chomp !IndentOfs
+                 | Folded !Chomp !IndentOfs
                  deriving (Eq,Ord,Show)
+
+data Chomp = Strip -- ^ Remove all trailing line breaks.
+           | Clip  -- ^ Keep first trailing line break.
+           | Keep  -- ^ Keep all trailing line breaks.
+           deriving (Eq,Ord,Show)
+
+data IndentOfs = IndentAuto | IndentOfs1 | IndentOfs2 | IndentOfs3 | IndentOfs4 | IndentOfs5 | IndentOfs6 | IndentOfs7 | IndentOfs8 | IndentOfs9
+                  deriving (Eq, Ord, Show, Enum)
 
 -- | Node style
 --
@@ -90,8 +100,8 @@ scalarNodeStyle :: ScalarStyle -> NodeStyle
 scalarNodeStyle Plain        = Flow
 scalarNodeStyle SingleQuoted = Flow
 scalarNodeStyle DoubleQuoted = Flow
-scalarNodeStyle Literal      = Block
-scalarNodeStyle Folded       = Block
+scalarNodeStyle (Literal _ _)  = Block
+scalarNodeStyle (Folded _ _ )  = Block
 
 -- | YAML Anchor identifiers
 type Anchor = Text
