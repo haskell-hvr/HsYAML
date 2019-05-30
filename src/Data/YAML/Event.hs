@@ -300,9 +300,12 @@ goNode0 DInfo {..} = goNode
 
         go0 _ _ xs = err xs
 
+        chn :: ScalarStyle -> Chomp -> ScalarStyle
         chn (Literal _ digit) chmp = Literal chmp digit
         chn (Folded _ digit) chmp = Folded chmp digit
         chn _ _ = error "impossible"
+
+        chn' :: ScalarStyle -> Int -> ScalarStyle
         chn' (Literal b _) digit = Literal b (toEnum digit)
         chn' (Folded b _) digit = Folded b (toEnum digit)
         chn' _ _ = error "impossible"

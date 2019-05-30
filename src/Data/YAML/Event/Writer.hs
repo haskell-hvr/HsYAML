@@ -164,7 +164,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         BlockOut -> anchorTag'' (Left ws) anc tag (eol <> mkInd n' <> "-" <> go n' False c' xs g)
 
         BlockIn
-          | not sol && n == 0 {- "---" case -} -> goSeq n sol BlockOut anc tag sty xs cont
+          | not sol && n == 0 {- "- -" case -} -> goSeq n sol BlockOut anc tag sty xs cont
           | otherwise -> (if sol then mempty else ws) <> anchorTag'' (Right (eol <> mkInd n')) anc tag ("-" <> go n' False c' xs g)
 
         BlockKey -> error ("sequence in block-key context not supported")
@@ -214,9 +214,11 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
       Literal chm iden -> pfx $ "|" <> goChomp chm <> goDigit iden <> g (T.lines t) (fromEnum iden) cont
 
       where
+        goDigit :: IndentOfs -> T.B.Builder
         goDigit iden = let ch = C.intToDigit.fromEnum $ iden
                        in if(ch == '0') then mempty else T.B.singleton ch
 
+        goChomp :: Chomp -> T.B.Builder
         goChomp chm = case chm of
            Strip -> T.B.singleton '-'
            Clip -> mempty

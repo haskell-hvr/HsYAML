@@ -159,7 +159,6 @@ cmdYaml2Event = do
       hPutStrLn stdout (ev2str True event)
       hFlush stdout
 
-
 cmdYaml2Event0 :: IO ()
 cmdYaml2Event0 = do
     inYamlDat <- BS.L.getContents
