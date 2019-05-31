@@ -48,6 +48,12 @@ main = do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
 
+    ("check":args')
+      | null args' -> cmdCheck
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to check sub-command"
+          exitFailure
+
     ("yaml2event0":args')
       | null args' -> cmdYaml2Event0
       | otherwise -> do
@@ -100,6 +106,7 @@ main = do
       hPutStrLn stderr "  yaml2json        reads YAML stream from STDIN and dumps JSON to STDOUT"
       hPutStrLn stderr "  yaml2yaml        reads YAML stream from STDIN and dumps YAML to STDOUT (non-streaming version)"
       hPutStrLn stderr "  yaml2yaml-       reads YAML stream from STDIN and dumps YAML to STDOUT (streaming version)"
+      hPutStrLn stderr "  check            reads YAML stream from STDIN and dumps YAML to STDOUT and also outputs the no. of differences and differences after a round-trip"
       hPutStrLn stderr "  run-tml          run/validate YAML-specific .tml file(s)"
       hPutStrLn stderr "  testml-compiler  emulate testml-compiler"
 
@@ -159,13 +166,43 @@ cmdYaml2Event = do
       hPutStrLn stdout (ev2str True event)
       hFlush stdout
 
-
 cmdYaml2Event0 :: IO ()
 cmdYaml2Event0 = do
     inYamlDat <- BS.L.getContents
     print (length (parseEvents' inYamlDat))
   where
     parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) id) . parseEvents
+
+cmdCheck :: IO() 
+cmdCheck = do
+  inYamlDat <- BS.L.getContents
+  let oldevstrm = sequence $ parseEvents inYamlDat
+  case (oldevstrm) of
+    Left (ofs,msg) -> do
+      case msg of
+        "" -> hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs)
+        _  -> hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")
+      exitFailure
+    Right oldEvents -> do
+      let oldEvLen = length oldEvents
+          output = (writeEvents YT.UTF8 oldEvents)
+      BS.L.hPutStr stdout output
+      hFlush stdout
+      let newevstrm = sequence $ parseEvents output
+      case (newevstrm) of
+        Left (ofs',msg') -> do
+          case msg' of
+            "" -> hPutStrLn stderr ("Parsing error in the generated YAML stream near byte offset " ++ show ofs')
+            _  -> hPutStrLn stderr ("Parsing error in the generated YAML stream near byte offset " ++ show ofs' ++ " (" ++ msg' ++ ")")
+          exitFailure
+        Right newEvents -> do
+          let newEvLen = length newEvents
+          hPutStrLn stdout $ printf "\nInput  Event Stream Length: %d\nOutput Event Stream Length: %d\n" oldEvLen newEvLen
+          let diffList = filter (\(a,b)-> if(a/=b) then True else False) $ zip oldEvents newEvents
+          hPutStrLn stdout $ printf "No of difference detected: %d\n" $ length diffList 
+          forM_ (diffList) $ \(old,new) -> do 
+            hPutStrLn stdout $ "Input  > " ++ show old
+            hPutStrLn stdout $ "Output < " ++ show new
 
 -- | 'J.Value' look-alike
 data Value' = Object'  (Map Text Value')
