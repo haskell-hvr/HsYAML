@@ -48,7 +48,7 @@ main = do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
 
-    ("check":args')
+    ("yaml2yaml-validate":args')
       | null args' -> cmdCheck
       | otherwise -> do
           hPutStrLn stderr "unexpected arguments passed to check sub-command"
@@ -99,16 +99,16 @@ main = do
       hPutStrLn stderr ""
       hPutStrLn stderr "Commands:"
       hPutStrLn stderr ""
-      hPutStrLn stderr "  yaml2token       reads YAML stream from STDIN and dumps tokens to STDOUT"
-      hPutStrLn stderr "  yaml2token0      reads YAML stream from STDIN and prints count of tokens to STDOUT"
-      hPutStrLn stderr "  yaml2event       reads YAML stream from STDIN and dumps events to STDOUT"
-      hPutStrLn stderr "  yaml2event0      reads YAML stream from STDIN and prints count of events to STDOUT"
-      hPutStrLn stderr "  yaml2json        reads YAML stream from STDIN and dumps JSON to STDOUT"
-      hPutStrLn stderr "  yaml2yaml        reads YAML stream from STDIN and dumps YAML to STDOUT (non-streaming version)"
-      hPutStrLn stderr "  yaml2yaml-       reads YAML stream from STDIN and dumps YAML to STDOUT (streaming version)"
-      hPutStrLn stderr "  check            reads YAML stream from STDIN and dumps YAML to STDOUT and also outputs the no. of differences and differences after a round-trip"
-      hPutStrLn stderr "  run-tml          run/validate YAML-specific .tml file(s)"
-      hPutStrLn stderr "  testml-compiler  emulate testml-compiler"
+      hPutStrLn stderr "  yaml2token          reads YAML stream from STDIN and dumps tokens to STDOUT"
+      hPutStrLn stderr "  yaml2token0         reads YAML stream from STDIN and prints count of tokens to STDOUT"
+      hPutStrLn stderr "  yaml2event          reads YAML stream from STDIN and dumps events to STDOUT"
+      hPutStrLn stderr "  yaml2event0         reads YAML stream from STDIN and prints count of events to STDOUT"
+      hPutStrLn stderr "  yaml2json           reads YAML stream from STDIN and dumps JSON to STDOUT"
+      hPutStrLn stderr "  yaml2yaml           reads YAML stream from STDIN and dumps YAML to STDOUT (non-streaming version)"
+      hPutStrLn stderr "  yaml2yaml-          reads YAML stream from STDIN and dumps YAML to STDOUT (streaming version)"
+      hPutStrLn stderr "  yaml2yaml-validate  reads YAML stream from STDIN and dumps YAML to STDOUT and also outputs the no. of differences and differences after a round-trip"
+      hPutStrLn stderr "  run-tml             run/validate YAML-specific .tml file(s)"
+      hPutStrLn stderr "  testml-compiler     emulate testml-compiler"
 
       exitFailure
 
@@ -136,9 +136,7 @@ cmdYaml2Yaml = do
   inYamlDat <- BS.L.getContents
   case (sequence $ parseEvents inYamlDat) of
     Left (ofs,msg) -> do
-      case msg of
-        "" -> hPutStrLn stderr ("parsing error near byte offset " ++ show ofs)
-        _  -> hPutStrLn stderr ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")
+      hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right events -> do
       BS.L.hPutStr stdout (writeEvents YT.UTF8 events)
@@ -158,9 +156,7 @@ cmdYaml2Event = do
   inYamlDat <- BS.L.getContents
   forM_ (parseEvents inYamlDat) $ \ev -> case ev of
     Left (ofs,msg) -> do
-      case msg of
-        "" -> hPutStrLn stderr ("parsing error near byte offset " ++ show ofs)
-        _  -> hPutStrLn stderr ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")
+      hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right event -> do
       hPutStrLn stdout (ev2str True event)
@@ -176,31 +172,23 @@ cmdYaml2Event0 = do
 cmdCheck :: IO() 
 cmdCheck = do
   inYamlDat <- BS.L.getContents
-  let oldevstrm = sequence $ parseEvents inYamlDat
-  case (oldevstrm) of
+  case sequence (parseEvents inYamlDat) of
     Left (ofs,msg) -> do
-      case msg of
-        "" -> hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs)
-        _  -> hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")
+      hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right oldEvents -> do
-      let oldEvLen = length oldEvents
-          output = (writeEvents YT.UTF8 oldEvents)
+      let output = writeEvents YT.UTF8 oldEvents
       BS.L.hPutStr stdout output
       hFlush stdout
-      let newevstrm = sequence $ parseEvents output
-      case (newevstrm) of
+      case sequence (parseEvents output) of
         Left (ofs',msg') -> do
-          case msg' of
-            "" -> hPutStrLn stderr ("Parsing error in the generated YAML stream near byte offset " ++ show ofs')
-            _  -> hPutStrLn stderr ("Parsing error in the generated YAML stream near byte offset " ++ show ofs' ++ " (" ++ msg' ++ ")")
+          hPutStrLn stderr ("Parsing error in the generated YAML stream near byte offset " ++ show ofs' ++ if null msg' then "" else " (" ++ msg' ++ ")")
           exitFailure
         Right newEvents -> do
-          let newEvLen = length newEvents
-          hPutStrLn stdout $ printf "\nInput  Event Stream Length: %d\nOutput Event Stream Length: %d\n" oldEvLen newEvLen
-          let diffList = filter (\(a,b)-> if(a/=b) then True else False) $ zip oldEvents newEvents
+          hPutStrLn stdout $ printf "\nInput  Event Stream Length: %d\nOutput Event Stream Length: %d\n" (length oldEvents) (length newEvents)
+          let diffList = filter (uncurry (/=)) $ zip oldEvents newEvents
           hPutStrLn stdout $ printf "No of difference detected: %d\n" $ length diffList 
-          forM_ (diffList) $ \(old,new) -> do 
+          forM_ diffList $ \(old,new) -> do 
             hPutStrLn stdout $ "Input  > " ++ show old
             hPutStrLn stdout $ "Output < " ++ show new
 
