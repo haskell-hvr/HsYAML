@@ -77,15 +77,18 @@ data ScalarStyle = Plain
                  | Literal !Chomp !IndentOfs
                  | Folded !Chomp !IndentOfs
                  deriving (Eq,Ord,Show)
+
+-- | <https://yaml.org/spec/1.2/spec.html#id2794534 Block Chomping Indicator>
+--  
 -- @since 0.2.0
 data Chomp = Strip -- ^ Remove all trailing line breaks and shows the presence of @-@ chomping indicator. 
-           | Clip  -- ^ Keep first trailing line break; this also the default behavior used if no explicit chomping indicator is specified
-           | Keep  -- ^ Keep all trailing line breaks and shows the presence of @-@ chomping indicator.
+           | Clip  -- ^ Keep first trailing line break; this also the default behavior used if no explicit chomping indicator is specified.
+           | Keep  -- ^ Keep all trailing line breaks and shows the presence of @+@ chomping indicator.
            deriving (Eq,Ord,Show)
 
 -- | Block Indentation Indicator
 --
--- @IndentAuto@ is the special case for auto Block Indentation Indicator
+-- 'IndentAuto' is the special case for auto Block Indentation Indicator
 --
 -- @since 0.2.0
 data IndentOfs = IndentAuto | IndentOfs1 | IndentOfs2 | IndentOfs3 | IndentOfs4 | IndentOfs5 | IndentOfs6 | IndentOfs7 | IndentOfs8 | IndentOfs9

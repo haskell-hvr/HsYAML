@@ -164,7 +164,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         BlockOut -> anchorTag'' (Left ws) anc tag (eol <> mkInd n' <> "-" <> go n' False c' xs g)
 
         BlockIn
-          | not sol && n == 0 {- "- -" case -} -> goSeq n sol BlockOut anc tag sty xs cont
+          | not sol && n == 0 {- "---" case -} -> goSeq n sol BlockOut anc tag sty xs cont
           | otherwise -> (if sol then mempty else ws) <> anchorTag'' (Right (eol <> mkInd n')) anc tag ("-" <> go n' False c' xs g)
 
         BlockKey -> error ("sequence in block-key context not supported")
@@ -193,7 +193,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
       Plain -- empty scalars
         | t == "", Nothing <- anc, Tag Nothing <- tag -> contEol -- not even node properties
         | sol, t == "" ->             anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol)
-        | t == "", BlockKey <- c   -> anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol) -- unnecessary if 
+        | t == "", BlockKey <- c   -> anchorTag0 anc tag (ws <> cont)
         | t == ""      -> anchorTag'' (Left ws) anc tag contEol
 
       Plain           -> pfx $
@@ -289,7 +289,6 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
       | l < 0     = error (show l)
       | otherwise = T.B.fromText (T.replicate l "  ")
 
-    mkInd' 0    = mempty
     mkInd' 1 = " "
     mkInd' 2 = "  "
     mkInd' 3 = "   "

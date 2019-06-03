@@ -286,8 +286,8 @@ goNode0 DInfo {..} = goNode
         go0 ii sty (Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest)
           | "'"  <- ind = go' ii "" SingleQuoted rest
           | "\"" <- ind = go' ii "" DoubleQuoted rest
-          | "|"  <- ind = go0 True (Literal Clip (toEnum 0)) rest
-          | ">"  <- ind = go0 True (Folded Clip (toEnum 0)) rest
+          | "|"  <- ind = go0 True (Literal Clip IndentAuto) rest
+          | ">"  <- ind = go0 True (Folded Clip IndentAuto) rest
 
           | "+"  <- ind = go0 ii (chn sty Keep) rest
           | "-"  <- ind = go0 ii (chn sty Strip) rest
