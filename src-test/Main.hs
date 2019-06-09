@@ -159,7 +159,6 @@ cmdYaml2Event = do
       hPutStrLn stdout (ev2str True event)
       hFlush stdout
 
-
 cmdYaml2Event0 :: IO ()
 cmdYaml2Event0 = do
     inYamlDat <- BS.L.getContents
@@ -462,8 +461,8 @@ ev2str withColSty = \case
     styStr = \case
            Plain        -> " :"
            DoubleQuoted -> " \""
-           Literal      -> " |"
-           Folded       -> " >"
+           Literal _ _  -> " |"
+           Folded  _ _  -> " >"
            SingleQuoted -> " '"
 
     ancTagStr manc mtag = anc' ++ tag'
