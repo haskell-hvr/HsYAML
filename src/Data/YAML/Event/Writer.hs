@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Safe              #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-matches #-} -- TODO
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -72,7 +71,7 @@ writeEventsText (StreamStart:xs) = T.B.toLazyText $ goStream xs (error "writeEve
   where
     -- goStream :: [Event] -> [Event] -> T.B.Builder
     goStream [StreamEnd] _ = mempty
-    goStream (StreamEnd : _ : rest) _cont = error "writeEvents: events after StreamEnd"
+    goStream (StreamEnd : _ : _ ) _cont = error "writeEvents: events after StreamEnd"
     goStream (DocumentStart marker : rest) cont
       = case marker of
           NoDirEndMarker         -> putNode False rest (\zs -> goDoc zs cont)
@@ -93,9 +92,9 @@ writeEventsText (x:_) = error ("writeEvents: unexpected " ++ show x ++ " (expect
 data Context = BlockOut     -- ^ Outside block sequence.
              | BlockIn      -- ^ Inside block sequence.
              | BlockKey     -- ^ Implicit block key.
-             -- | FlowOut      -- ^ Outside flow collection.
-             -- | FlowIn       -- ^ Inside flow collection.
-             -- | FlowKey      -- ^ Implicit flow key.
+             | FlowOut      -- ^ Outside flow collection.
+             | FlowIn       -- ^ Inside flow collection.
+             | FlowKey      -- ^ Implicit flow key.
              deriving (Eq,Show)
 
 putNode :: Bool -> [Event] -> ([Event] -> T.B.Builder) -> T.B.Builder
@@ -124,58 +123,115 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
     go _  _ _  [] _cont = error ("putNode: expected node-start event instead of end-of-stream")
     go !n !sol c (t : rest) cont = case t of
         Scalar        anc tag sty t' -> goStr (n+1) sol c anc tag sty t' (cont rest)
-        SequenceStart anc tag sty    -> goSeq (n+1) sol c anc tag sty rest cont
-        MappingStart  anc tag sty    -> goMap (n+1) sol c anc tag sty rest cont
+        SequenceStart anc tag sty    -> goSeq (n+1) sol (chn sty) anc tag sty rest cont
+        MappingStart  anc tag sty    -> goMap (n+1) sol (chn sty) anc tag sty rest cont
         Alias a                      -> pfx <> goAlias c a (cont rest)
 
         _ -> error ("putNode: expected node-start event instead of " ++ show t)
-      where -- TODO flow
+
+      where
         pfx | sol           = mempty
             | BlockKey <- c = mempty
+            | FlowKey  <- c = mempty
             | otherwise     = T.B.singleton ' '
 
+        chn sty
+          | Flow <-sty, (BlockIn == c || BlockOut == c) = FlowOut
+          | otherwise = c
 
-    goMap n sol c anc tag sty (MappingEnd : rest) cont = pfx $ "{}\n" <> cont rest
+
+    goMap _ sol _ anc tag _ (MappingEnd : rest) cont = pfx $ "{}\n" <> cont rest
       where
         pfx cont' = (if sol then mempty else ws) <> anchorTag'' (Right ws) anc tag cont'
 
-    goMap n sol c anc tag sty xs cont = case c of
-        BlockIn | not (not sol && n == 0) -- avoid "--- " case
-           ->  (if sol then mempty else ws) <> anchorTag'' (Right (eol <> mkInd n)) anc tag
-               (putKey xs (\ys -> go n False BlockOut ys g))
-        _  ->  anchorTag'' (Left ws) anc tag $ T.B.singleton '\n' <> g xs
-      where
-        g (MappingEnd : rest) = cont rest
-        g ys                  = pfx <> putKey ys (\zs -> go n False BlockOut zs g)
+    goMap n sol c anc tag sty xs cont = case sty of
+      Block ->
+        case c of
+          BlockIn | not (not sol && n == 0) -- avoid "--- " case
+             ->  (if sol then mempty else ws) <> anchorTag'' (Right (eol <> mkInd n)) anc tag
+                 (putKey xs (\ys -> go n False BlockOut ys g))
+          _  ->  anchorTag'' (Left ws) anc tag $ doEol <> g xs
+        where
+          g (MappingEnd : rest) = cont rest
+          g ys                  = pfx <> putKey ys (\zs -> go n False (if FlowIn == c then FlowIn else BlockOut) zs g)
 
-        pfx = mkInd n
+          pfx = if (c == BlockIn || c == BlockOut || c == BlockKey ) then mkInd n else ws 
 
-        putKey zs cont2
-          | isSmallKey zs =    go n (n == 0) BlockKey zs (\ys -> ":" <> cont2 ys)
-          | otherwise     = "?" <> go n False BlockIn zs (\ys -> mkInd n <> ":" <> cont2 ys)
+          doEol = case c of
+              FlowKey -> mempty
+              FlowIn -> mempty
+              _        -> eol
+
+          putKey zs cont2
+            | isSmallKey zs =    go n (n == 0) (if FlowIn == c then FlowKey else BlockKey) zs (\ys -> ":" <> cont2 ys)
+            | FlowIn <- c   = "?" <> go n False BlockIn zs (\ys -> ws <> mkInd (n-1) <> ":" <> cont2 ys)
+            | otherwise     = "?" <> go n False BlockIn zs (\ys -> mkInd n <> ":" <> cont2 ys)
+
+      Flow -> (if sol then mempty else ws) <> anchorTag'' (Right ws) anc tag ("{" <> eol <> mkInd n' <> (putKey xs (\ys -> go n' False c' ys g)))
+        where
+          c'| FlowIn   <- c = FlowIn
+            | FlowOut  <- c = FlowIn
+            | BlockKey <- c = FlowKey
+            | FlowKey  <- c = FlowKey
+            | otherwise = error "Invalid context Mapping Flow style"
+
+          n' = n + 1
+
+          doEol = case c of
+            FlowKey -> mempty
+            FlowIn -> mempty
+            _        -> eol
+
+          g (MappingEnd : rest) = eol <> (if sol then mempty else ws) <> mkInd (n - 1) <> "}"<> doEol <> cont rest
+          g ys                  = "," <> eol<> mkInd n'<> putKey ys (\zs -> go n' False FlowIn zs g)
+
+          putKey zs cont2
+            | isSmallKey zs =    go n' (n == 0) FlowKey zs (\ys -> ":" <> cont2 ys)
+            | otherwise     = "?" <> go n' False FlowIn zs (\ys ->eol<> mkInd n' <> ":" <> cont2 ys)
 
 
-
-    goSeq n sol c anc tag sty (SequenceEnd : rest) cont = pfx $ "[]\n" <> cont rest
+    goSeq _ sol _ anc tag _ (SequenceEnd : rest) cont = pfx $ "[]\n" <> cont rest
       where
         pfx cont' = (if sol then mempty else ws) <> anchorTag'' (Right ws) anc tag cont'
 
-    goSeq n sol c anc tag sty xs cont = case c of
-        BlockOut -> anchorTag'' (Left ws) anc tag (eol <> mkInd n' <> "-" <> go n' False c' xs g)
+    goSeq n sol c anc tag sty xs cont = case sty of 
+      Block -> case c of      
+          BlockOut -> anchorTag'' (Left ws) anc tag (eol <> mkInd n' <> "-" <> go n' False c' xs g)
 
-        BlockIn
-          | not sol && n == 0 {- "---" case -} -> goSeq n sol BlockOut anc tag sty xs cont
-          | otherwise -> (if sol then mempty else ws) <> anchorTag'' (Right (eol <> mkInd n')) anc tag ("-" <> go n' False c' xs g)
+          BlockIn
+            | not sol && n == 0 {- "---" case -} -> goSeq n sol BlockOut anc tag sty xs cont
+            | otherwise -> (if sol then mempty else ws) <> anchorTag'' (Right (eol <> mkInd n')) anc tag ("-" <> go n' False c' xs g)
 
-        BlockKey -> error ("sequence in block-key context not supported")
+          BlockKey -> error ("sequence in block-key context not supported")
 
-      where
-        c' = BlockIn
-        n' | BlockOut <- c = max 0 (n - 1)
-           | otherwise     = n
+          _ -> error "Invalid Context in Block style"
 
-        g (SequenceEnd : rest) = cont rest
-        g ys                   = mkInd n' <> "-" <> go n' False c' ys g
+        where
+          c' = BlockIn
+          n' | BlockOut <- c = max 0 (n - 1)
+             | otherwise     = n
+
+          g (SequenceEnd : rest) = cont rest
+          g ys                   = mkInd n' <> "-" <> go n' False c' ys g
+
+      Flow -> (if sol then mempty else ws) <> anchorTag'' (Right ws) anc tag ("[" <> eol <> mkInd n' <> go n' False c' xs g)
+
+        where
+            c'| FlowIn   <- c = FlowIn
+              | FlowOut  <- c = FlowIn
+              | BlockKey <- c = FlowKey
+              | FlowKey  <- c = FlowKey
+              | otherwise = error "Invalid context Sequence Flow style"
+
+            n' = n + 1
+
+            doEol = case c of
+              FlowKey -> mempty
+              FlowIn -> mempty
+              _        -> eol
+
+            g (SequenceEnd : rest) = eol <> (if sol then mempty else ws) <> mkInd (n - 1) <> "]" <> doEol <> cont rest
+            g ys                   = "," <> eol <> mkInd n' <> go n' False c' ys g
 
 
     goAlias c a cont = T.B.singleton '*' <> T.B.fromText a <> sep <> cont
@@ -184,6 +240,9 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
           BlockIn  -> eol
           BlockOut -> eol
           BlockKey -> T.B.singleton ' '
+          FlowIn   -> mempty
+          FlowOut  -> eol
+          FlowKey  -> T.B.singleton ' '
 
     goStr :: Int -> Bool -> Context -> Maybe Anchor -> Tag -> ScalarStyle -> Text -> T.B.Builder -> T.B.Builder
 --    goStr !n !sol c anc tag sty t cont | traceShow (n,sol,c,anc,tag,sty,t) False = undefined
@@ -192,8 +251,9 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
 
       Plain -- empty scalars
         | t == "", Nothing <- anc, Tag Nothing <- tag -> contEol -- not even node properties
-        | sol, t == "" ->             anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol)
-        | t == "", BlockKey <- c   -> anchorTag0 anc tag (ws <> cont)
+        | sol, t == "" ->             anchorTag0 anc tag (if  c == BlockKey || c == FlowKey then ws <> cont else contEol)
+        | t == "", BlockKey <- c   -> anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol) -- unnecessary if 
+        | t == "", FlowKey <- c   -> anchorTag0 anc tag (if c == BlockKey then ws <> cont else contEol) -- unnecessary if
         | t == ""      -> anchorTag'' (Left ws) anc tag contEol
 
       Plain           -> pfx $
@@ -224,10 +284,12 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
            Clip -> mempty
            Keep -> T.B.singleton '+'
 
-        pfx cont' = (if sol || c == BlockKey then mempty else ws) <> anchorTag'' (Right ws) anc tag cont'
+        pfx cont' = (if sol || c == BlockKey || c == FlowKey then mempty else ws) <> anchorTag'' (Right ws) anc tag cont'
 
         doEol = case c of
           BlockKey -> False
+          FlowKey -> False
+          FlowIn -> False
           _        -> True
 
         contEol
