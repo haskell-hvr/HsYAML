@@ -350,7 +350,10 @@ cmdRunTml args = do
           if evs'' == testEvDat
              then do
 
-               let outYamlDatIut = writeEvents YT.UTF8 evs'
+               let toBlockStyle (YE.SequenceStart a b _ ) = YE.SequenceStart a b YE.Block
+                   toBlockStyle (YE.MappingStart a b _ ) = YE.MappingStart a b YE.Block
+                   toBlockStyle a = a
+                   outYamlDatIut = writeEvents YT.UTF8 (map toBlockStyle evs')
                    outYamlEvsIut = either (const []) (map (ev2str False)) $ sequence $ parseEvents outYamlDatIut
 
                unless (outYamlEvsIut == evs'') $ do
