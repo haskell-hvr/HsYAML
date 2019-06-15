@@ -103,7 +103,7 @@ import qualified Data.Map             as Map
 import           Data.Maybe           (listToMaybe)
 import qualified Data.Text            as T
 
-import           Data.YAML.Event      (Tag, isUntagged, tagToText)
+import           Data.YAML.Event      (Tag, isUntagged, tagToText, Pos)
 import           Data.YAML.Loader
 import           Data.YAML.Schema
 
@@ -163,7 +163,7 @@ mv .!= def = fmap (maybe def id) mv
 -- * Don't create 'Anchor' nodes
 -- * Disallow cyclic anchor references
 --
-decodeNode :: BS.L.ByteString -> Either String [Doc Node]
+decodeNode :: BS.L.ByteString -> Either (Pos, String) [Doc Node]
 decodeNode = decodeNode' coreSchemaResolver False False
 
 
@@ -173,19 +173,19 @@ decodeNode' :: SchemaResolver  -- ^ YAML Schema resolver to use
             -> Bool            -- ^ Whether to emit anchor nodes
             -> Bool            -- ^ Whether to allow cyclic references
             -> BS.L.ByteString -- ^ YAML document to parse
-            -> Either String [Doc Node]
+            -> Either (Pos, String) [Doc Node]
 decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
   = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
   where
-    failsafeLoader = Loader { yScalar   = \t s v -> pure $ fmap Scalar (schemaResolverScalar t s v)
-                            , ySequence = \t vs  -> pure $ schemaResolverSequence t >>= \t' -> Right (Sequence t' vs)
-                            , yMapping  = \t kvs -> pure $ schemaResolverMapping  t >>= \t' -> (Mapping t' <$> mkMap kvs)
+    failsafeLoader = Loader { yScalar   = \t s v _-> pure $ fmap Scalar (schemaResolverScalar t s v)
+                            , ySequence = \t vs _ -> pure $ schemaResolverSequence t >>= \t' -> Right (Sequence t' vs)
+                            , yMapping  = \t kvs _-> pure $ schemaResolverMapping  t >>= \t' -> (Mapping t' <$> mkMap kvs)
                             , yAlias    = if allowCycles
-                                          then \_ _ n -> pure $ Right n
-                                          else \_ c n -> pure $ if c then Left "cycle detected" else Right n
+                                          then \_ _ n _-> pure $ Right n
+                                          else \_ c n _-> pure $ if c then Left "cycle detected" else Right n
                             , yAnchor   = if anchorNodes
-                                          then \j n   -> pure $ Right (Anchor j n)
-                                          else \_ n   -> pure $ Right n
+                                          then \j n _  -> pure $ Right (Anchor j n)
+                                          else \_ n _  -> pure $ Right n
                             }
 
     mkMap kvs
@@ -457,7 +457,9 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 -- UTF-32 (LE or BE) encoding (which is auto-detected).
 --
 decode :: FromYAML v => BS.L.ByteString -> Either String [v]
-decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+decode bs0 = case decodeNode bs0 of
+      Left (_, err) -> Left err  
+      Right a  -> (Right a) >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 -- | Convenience wrapper over 'decode' expecting exactly one YAML document
 --

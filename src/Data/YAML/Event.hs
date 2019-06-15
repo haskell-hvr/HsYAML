@@ -12,6 +12,7 @@ module Data.YAML.Event
     , writeEventsText
     , EvStream
     , Event(..)
+    , EvPos(..)
     , Directives(..)
     , ScalarStyle(..)
     , NodeStyle(..)
@@ -58,6 +59,19 @@ mkTag'' s  = Tag (Just $! T.pack ("tag:yaml.org,2002:" ++ s))
 tok2pos :: Y.Token -> Pos
 tok2pos Y.Token { Y.tByteOffset = posByteOffset, Y.tCharOffset = posCharOffset, Y.tLine = posLine, Y.tLineChar = posColumn } = Pos {..}
 
+getEvPos :: Event -> Y.Token -> EvPos
+getEvPos ev tok = EvPos { eEvent = ev , ePos = tok2pos tok } 
+
+initEvPos :: Event -> EvPos
+initEvPos ev = EvPos { eEvent = ev, ePos = Pos { posByteOffset = 0 , posCharOffset = 0  , posLine = 1 , posColumn = 0 } }
+
+rotatePosList :: EvStream -> EvStream
+rotatePosList evstrm = case sequence evstrm of
+    Right evPoslist -> 
+      zipWith (\a b -> Right EvPos{ eEvent = a , ePos = b }) (map eEvent evPoslist) ((last posList):(init posList))
+        where posList = map ePos evPoslist
+    Left _ -> evstrm
+
 -- internal
 type TagHandle = Text
 type Props = (Maybe Text,Tag)
@@ -99,7 +113,7 @@ getUriTag toks0 = do
 -- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
 -- (which will be auto-detected).
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
+parseEvents = \bs0 -> rotatePosList $ Right (initEvPos StreamStart) : (go0 $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -117,7 +131,7 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
 
 
     go0 :: Tok2EvStream
-    go0 []                                                = [Right StreamEnd]
+    go0 []                                                = [Right (initEvPos StreamEnd)]
     go0 toks0@(Y.Token { Y.tCode = Y.BeginDocument } : _) = go1 dinfo0 toks0
     go0 (Y.Token { Y.tCode = Y.DocumentEnd } : rest)      = go0 rest -- stray/redundant document-end markers cause this
     go0 xs                                                = err xs
@@ -125,19 +139,19 @@ parseEvents = \bs0 -> Right StreamStart : (go0 $ stripComments $ filter (not . i
 
     go1 :: DInfo -> Tok2EvStream
     go1 m (Y.Token { Y.tCode = Y.BeginDocument } : rest) = goDirs m rest
-    go1 _ (Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = Right (DocumentEnd True) : go0 rest
-    go1 _ (Y.Token { Y.tCode = Y.EndDocument } : rest) = Right (DocumentEnd False) : go0 rest
+    go1 _ (tok@Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = ( Right (getEvPos (DocumentEnd True) tok )): go0 rest
+    go1 _ (tok@Y.Token { Y.tCode = Y.EndDocument } : rest) = ( Right (getEvPos (DocumentEnd False) tok )) : go0 rest
     go1 m (Y.Token { Y.tCode = Y.BeginNode } : rest) = goNode0 m rest (go1 m)
     go1 _ xs = err xs
 
     -- consume {Begin,End}Directives and emit DocumentStart event
     goDirs :: DInfo -> Tok2EvStream
     goDirs m (Y.Token { Y.tCode = Y.BeginDirective } : rest) = goDir1 m rest
-    goDirs m (Y.Token { Y.tCode = Y.DirectivesEnd } : rest)
-      | Just (1,mi) <- diVer m = Right (DocumentStart (DirEndMarkerVersion mi)) : go1 m rest
-      | otherwise              = Right (DocumentStart DirEndMarkerNoVersion) : go1 m rest
+    goDirs m (tok@Y.Token { Y.tCode = Y.DirectivesEnd } : rest)
+      | Just (1,mi) <- diVer m = Right (getEvPos (DocumentStart (DirEndMarkerVersion mi)) tok) : go1 m rest
+      | otherwise              = Right (getEvPos (DocumentStart DirEndMarkerNoVersion) tok) : go1 m rest
     goDirs _ xs@(Y.Token { Y.tCode = Y.BeginDocument } : _) = err xs
-    goDirs m xs = Right (DocumentStart NoDirEndMarker) : go1 m xs
+    goDirs m xs = Right ( getEvPos (DocumentStart NoDirEndMarker) (head xs) ): go1 m xs
 
     -- single directive
     goDir1 :: DInfo -> [Y.Token] -> EvStream
@@ -198,23 +212,23 @@ goNode0 DInfo {..} = goNode
 
     goNode :: Tok2EvStreamCont
     goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar (mempty,untagged) rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (SequenceStart Nothing untagged (seqInd ind)) : goSeq rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (MappingStart Nothing untagged (mapInd ind)) : goMap rest (flip goNodeEnd cont)
-    goNode (Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (MappingStart Nothing untagged Block) : goMap rest (flip goNodeEnd cont)
+    goNode (tok@Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (SequenceStart Nothing untagged (seqInd ind)) tok): goSeq rest (flip goNodeEnd cont)
+    goNode (tok@Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (MappingStart Nothing untagged (mapInd ind)) tok) : goMap rest (flip goNodeEnd cont)
+    goNode (tok@Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (getEvPos (MappingStart Nothing untagged Block) tok) : goMap rest (flip goNodeEnd cont)
     goNode (Y.Token { Y.tCode = Y.BeginProperties } : rest) cont = goProp (mempty,untagged) rest (\p rest' -> goNode' p rest' cont)
-    goNode (Y.Token { Y.tCode = Y.BeginAlias } :
+    goNode (tok@Y.Token { Y.tCode = Y.BeginAlias } :
             Y.Token { Y.tCode = Y.Indicator } :
             Y.Token { Y.tCode = Y.Meta, Y.tText = anchor } :
             Y.Token { Y.tCode = Y.EndAlias } :
             Y.Token { Y.tCode = Y.EndNode } :
-            rest) cont = Right (Alias (T.pack anchor)) : cont rest
+            rest) cont = Right (getEvPos (Alias (T.pack anchor)) tok) : cont rest
     goNode xs _cont = err xs
 
     goNode' :: Props -> Tok2EvStreamCont
     goNode' props (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont   = goScalar props rest (flip goNodeEnd cont)
-    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (SequenceStart manchor mtag (seqInd ind)) : goSeq rest (flip goNodeEnd cont)
-    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (MappingStart manchor mtag (mapInd ind)) : goMap rest (flip goNodeEnd cont)
-    goNode' (manchor,mtag) (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart manchor mtag Block) : goMap rest (flip goNodeEnd cont)
+    goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (SequenceStart manchor mtag (seqInd ind)) tok) : goSeq rest (flip goNodeEnd cont)
+    goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (MappingStart manchor mtag (mapInd ind)) tok) : goMap rest (flip goNodeEnd cont)
+    goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (getEvPos (MappingStart manchor mtag Block) tok) : goMap rest (flip goNodeEnd cont)
     goNode' _ xs                                            _cont = err xs
 
     goNodeEnd :: Tok2EvStreamCont
@@ -296,7 +310,7 @@ goNode0 DInfo {..} = goNode
         go0 ii sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest)      = go' ii t sty rest
         go0 ii sty (Y.Token { Y.tCode = Y.LineFold } : rest)               = go' ii " " sty rest
         go0 ii sty (Y.Token { Y.tCode = Y.LineFeed } : rest)               = go' ii "\n" sty rest
-        go0 _  sty (Y.Token { Y.tCode = Y.EndScalar } : rest)              = Right (Scalar manchor tag sty mempty) : cont rest
+        go0 _  sty (tok@Y.Token { Y.tCode = Y.EndScalar } : rest)          = Right (getEvPos (Scalar manchor tag sty mempty) tok) : cont rest
 
         go0 _ _ xs = err xs
 
@@ -360,7 +374,7 @@ goNode0 DInfo {..} = goNode
         go' ii acc sty (t@Y.Token { Y.tCode = Y.EndScalar } :
                      rest)
           | ii, hasLeadingSpace acc = [Left (tok2pos t, "leading empty lines contain more spaces than the first non-empty line in scalar: " ++ show acc)]
-          | otherwise = Right (Scalar manchor tag sty (T.pack acc)) : cont rest
+          | otherwise = Right (getEvPos (Scalar manchor tag sty (T.pack acc)) t) : cont rest
 
         go' _ _ _ xs | False = error (show xs)
         go' _ _ _ xs = err xs
@@ -370,16 +384,16 @@ goNode0 DInfo {..} = goNode
         hasLeadingSpace _         = False
 
     goSeq :: Tok2EvStreamCont
-    goSeq (Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right SequenceEnd : cont rest
+    goSeq (tok@Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right (getEvPos SequenceEnd  tok): cont rest
     goSeq (Y.Token { Y.tCode = Y.BeginNode } : rest) cont = goNode rest (flip goSeq cont)
-    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } :  rest) cont = Right (MappingStart Nothing untagged (mapInd ind)) : goMap rest (flip goSeq cont)
-    goSeq (Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (MappingStart Nothing untagged Block) : goMap rest (flip goSeq cont)
+    goSeq (tok@Y.Token { Y.tCode = Y.BeginMapping } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } :  rest) cont = Right (getEvPos (MappingStart Nothing untagged (mapInd ind)) tok) : goMap rest (flip goSeq cont)
+    goSeq (tok@Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (getEvPos (MappingStart Nothing untagged Block) tok) : goMap rest (flip goSeq cont)
     goSeq (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goSeq rest cont
 --    goSeq xs _cont = error (show xs)
     goSeq xs _cont = err xs
 
     goMap :: Tok2EvStreamCont
-    goMap (Y.Token { Y.tCode = Y.EndMapping } : rest) cont = Right MappingEnd : cont rest
+    goMap (tok@Y.Token { Y.tCode = Y.EndMapping } : rest) cont = Right (getEvPos MappingEnd tok) : cont rest
     goMap (Y.Token { Y.tCode = Y.BeginPair } : rest) cont = goPair1 rest (flip goMap cont)
     goMap (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goMap rest cont
     goMap xs _cont = err xs

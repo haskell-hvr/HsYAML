@@ -7,6 +7,7 @@
 module Data.YAML.Event.Internal
     ( EvStream
     , Event(..)
+    , EvPos(..)
     , Directives(..)
     , ScalarStyle(..)
     , Chomp(..)
@@ -56,6 +57,14 @@ data Event
     | MappingStart   !(Maybe Anchor)  !Tag  !NodeStyle
     | MappingEnd
     deriving (Show, Eq)
+
+-- |'Event' with corresponding Pos in YAML stream
+--
+-- @since 0.2.0
+data EvPos = EvPos{
+    eEvent :: !Event,
+    ePos   :: !Pos
+}  deriving (Eq, Show)
 
 -- | Encodes document @%YAML@ directives and the directives end-marker
 --
@@ -126,7 +135,8 @@ instance Show Tag where
 --
 -- A 'Left' value denotes parsing errors. The event stream ends
 -- immediately once a 'Left' value is returned.
-type EvStream = [Either (Pos,String) Event]
+type EvStream = [Either (Pos,String) EvPos]
+
 
 -- | Position in parsed YAML source
 data Pos = Pos
@@ -134,8 +144,7 @@ data Pos = Pos
     , posCharOffset :: !Int -- ^ 0-based character (Unicode code-point) offset
     , posLine       :: !Int -- ^ 1-based line number
     , posColumn     :: !Int -- ^ 0-based character (Unicode code-point) column number
-    } deriving Show
-
+    }  deriving (Eq, Show)
 
 -- | Convert 'Tag' to its string representation
 --

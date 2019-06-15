@@ -49,7 +49,7 @@ main = do
           exitFailure
 
     ("yaml2yaml-validate":args')
-      | null args' -> cmdCheck
+      | null args' -> cmdYaml2YamlVal
       | otherwise -> do
           hPutStrLn stderr "unexpected arguments passed to check sub-command"
           exitFailure
@@ -139,7 +139,7 @@ cmdYaml2Yaml = do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right events -> do
-      BS.L.hPutStr stdout (writeEvents YT.UTF8 events)
+      BS.L.hPutStr stdout (writeEvents YT.UTF8 (map eEvent events))
       hFlush stdout
 
 -- lazy streaming version
@@ -149,7 +149,7 @@ cmdYaml2Yaml' = do
     BS.L.hPutStr stdout $ writeEvents YT.UTF8 $ parseEvents' inYamlDat
     hFlush stdout
   where
-    parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) id) . parseEvents
+    parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) (\evPos -> eEvent evPos)) . parseEvents
 
 cmdYaml2Event :: IO ()
 cmdYaml2Event = do
@@ -159,7 +159,7 @@ cmdYaml2Event = do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right event -> do
-      hPutStrLn stdout (ev2str True event)
+      hPutStrLn stdout (ev2str True (eEvent event))
       hFlush stdout
 
 cmdYaml2Event0 :: IO ()
@@ -169,15 +169,15 @@ cmdYaml2Event0 = do
   where
     parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) id) . parseEvents
 
-cmdCheck :: IO() 
-cmdCheck = do
+cmdYaml2YamlVal :: IO() 
+cmdYaml2YamlVal = do
   inYamlDat <- BS.L.getContents
   case sequence (parseEvents inYamlDat) of
     Left (ofs,msg) -> do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right oldEvents -> do
-      let output = writeEvents YT.UTF8 oldEvents
+      let output = writeEvents YT.UTF8 (map eEvent oldEvents)
       BS.L.hPutStr stdout output
       hFlush stdout
       case sequence (parseEvents output) of
@@ -245,7 +245,9 @@ decodeAeson = fmap (map toProperValue) . decode'
   where
     -- TODO
     decode' :: FromYAML v => BS.L.ByteString -> Either String [v]
-    decode' bs0 = decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+    decode' bs0 = case decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 of
+      Left (_, err) -> Left err  
+      Right a  -> (Right a) >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 -- | Try to convert 'Double' into 'Int64', return 'Nothing' if not
 -- representable loss-free as integral 'Int64' value.
@@ -346,15 +348,18 @@ cmdRunTml args = do
               pure (Fail FailParse)
 
         Right evs' -> do
-          let evs'' = map (ev2str False) evs'
+          let events = map eEvent evs'
+              evs'' = map (ev2str False) events 
           if evs'' == testEvDat
              then do
 
-               let toBlockStyle (YE.SequenceStart a b _ ) = YE.SequenceStart a b YE.Block
-                   toBlockStyle (YE.MappingStart a b _ ) = YE.MappingStart a b YE.Block
-                   toBlockStyle a = a
-                   outYamlDatIut = writeEvents YT.UTF8 (map toBlockStyle evs')
-                   outYamlEvsIut = either (const []) (map (ev2str False)) $ sequence $ parseEvents outYamlDatIut
+               let outYamlDatIut = writeEvents YT.UTF8 (map toBlockStyle events)
+                    where toBlockStyle ev = case ev of
+                                              SequenceStart a b _ -> SequenceStart a b Block
+                                              MappingStart a b _  -> MappingStart a b Block
+                                              otherwise           -> ev
+                   Right ev = sequence $ parseEvents outYamlDatIut
+                   outYamlEvsIut = either (const []) (map (ev2str False)) (Right (map eEvent ev))
 
                unless (outYamlEvsIut == evs'') $ do
                  putStrLn' ("\nWARNING: (iut /= ref)")
