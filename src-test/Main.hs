@@ -213,7 +213,7 @@ toProperValue v = case v of
   Object' xs -> J.Object (fmap toProperValue xs)
 
 instance FromYAML Value' where
-  parseYAML (Y.Scalar s) = case s of
+  parseYAML (Y.Scalar _ s) = case s of
     SNull        -> pure Null'
     SBool b      -> pure (Bool' b)
     SFloat x     -> pure (NumberD' x)
@@ -221,11 +221,11 @@ instance FromYAML Value' where
     SStr t       -> pure (String' t)
     SUnknown _ t -> pure (String' t) -- HACK
 
-  parseYAML (Y.Sequence _ xs) = Array' <$> mapM parseYAML xs
+  parseYAML (Y.Sequence _ _ xs) = Array' <$> mapM parseYAML xs
 
-  parseYAML (Y.Mapping _ m) = Object' . Map.fromList <$> mapM parseKV (Map.toList m)
+  parseYAML (Y.Mapping _ _ m) = Object' . Map.fromList <$> mapM parseKV (Map.toList m)
     where
-      parseKV :: (Y.Node,Y.Node) -> Parser (Text,Value')
+      parseKV :: (Y.Node Pos,Y.Node Pos) -> Parser (Text,Value')
       parseKV (k,v) = (,) <$> parseK k <*> parseYAML v
 
       -- for numbers and !!null we apply implicit conversions
@@ -245,9 +245,8 @@ decodeAeson = fmap (map toProperValue) . decode'
   where
     -- TODO
     decode' :: FromYAML v => BS.L.ByteString -> Either String [v]
-    decode' bs0 = case decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 of
-      Left (_, err) -> Left err  
-      Right a  -> (Right a) >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+    decode' bs0 = decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+
 
 -- | Try to convert 'Double' into 'Int64', return 'Nothing' if not
 -- representable loss-free as integral 'Int64' value.

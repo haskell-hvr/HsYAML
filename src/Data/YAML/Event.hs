@@ -62,15 +62,16 @@ tok2pos Y.Token { Y.tByteOffset = posByteOffset, Y.tCharOffset = posCharOffset, 
 getEvPos :: Event -> Y.Token -> EvPos
 getEvPos ev tok = EvPos { eEvent = ev , ePos = tok2pos tok } 
 
-initEvPos :: Event -> EvPos
-initEvPos ev = EvPos { eEvent = ev, ePos = Pos { posByteOffset = 0 , posCharOffset = 0  , posLine = 1 , posColumn = 0 } }
+initPos :: Pos
+initPos = Pos { posByteOffset = 0 , posCharOffset = 0  , posLine = 1 , posColumn = 0 }
 
-rotatePosList :: EvStream -> EvStream
-rotatePosList evstrm = case sequence evstrm of
-    Right evPoslist -> 
-      zipWith (\a b -> Right EvPos{ eEvent = a , ePos = b }) (map eEvent evPoslist) ((last posList):(init posList))
-        where posList = map ePos evPoslist
-    Left _ -> evstrm
+initEvPos :: Event -> EvPos
+initEvPos ev = EvPos { eEvent = ev, ePos = initPos }
+
+delayPos :: Pos -> EvStream -> EvStream
+delayPos _ [] = []
+delayPos pos (Right EvPos{  eEvent = a ,ePos = nextPos } : rest ) = (Right EvPos{ eEvent = a , ePos = pos}: delayPos nextPos rest)
+delayPos _ (Left (nextPos, str) : rest ) = (Left (nextPos,str): delayPos nextPos rest)
 
 -- internal
 type TagHandle = Text
@@ -113,7 +114,7 @@ getUriTag toks0 = do
 -- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
 -- (which will be auto-detected).
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> rotatePosList $ Right (initEvPos StreamStart) : (go0 $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
+parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)

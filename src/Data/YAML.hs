@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE Safe              #-}
 {-# LANGUAGE CPP               #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -103,7 +104,7 @@ import qualified Data.Map             as Map
 import           Data.Maybe           (listToMaybe)
 import qualified Data.Text            as T
 
-import           Data.YAML.Event      (Tag, isUntagged, tagToText, Pos)
+import           Data.YAML.Event      (Tag, isUntagged, tagToText, Pos(..))
 import           Data.YAML.Loader
 import           Data.YAML.Schema
 
@@ -113,20 +114,49 @@ import           Util
 newtype Doc n = Doc n deriving (Eq,Ord,Show)
 
 -- | YAML Document node
-data Node = Scalar   !Scalar
-          | Mapping  !Tag Mapping
-          | Sequence !Tag [Node]
-          | Anchor   !NodeId !Node
-          deriving (Eq,Ord,Show)
+data Node loc 
+          = Scalar   !loc !Scalar 
+          | Mapping  !loc !Tag (Map (Node loc) (Node loc)) 
+          | Sequence !loc !Tag [Node loc] 
+          | Anchor   !loc !NodeId !(Node loc) 
+          deriving (Show)
+
+instance Eq (Node loc) where
+  Scalar   _ a    ==  Scalar   _ a'    = a == a' 
+  Mapping  _ a b  ==  Mapping  _ a' b' = a == a' && b == b'
+  Sequence _ a b  ==  Sequence _ a' b' = a == a' && b == b'
+  Anchor   _ a b  ==  Anchor   _ a' b' = a == a' && b == b'
+  _ == _ = False
+
+instance Ord (Node loc) where
+  compare (Scalar _ a)      (Scalar _ a')      = compare a a'
+  compare (Scalar _ _)      (Mapping _ _ _)    = LT
+  compare (Scalar _ _)      (Sequence _ _ _)   = LT
+  compare (Scalar _ _)      (Anchor _ _ _)     = LT
+
+  compare (Mapping _ _ _)   (Scalar _ _)       = GT
+  compare (Mapping _ a b)   (Mapping _ a' b')  = if EQ == compare a a' then compare b b' else compare a a'
+  compare (Mapping _ _ _)   (Sequence _ _ _)   = LT
+  compare (Mapping _ _ _)   (Anchor _ _ _)     = LT
+  
+  compare (Sequence _ _ _)  (Scalar _ _)       = GT
+  compare (Sequence _ _ _)  (Mapping _ _ _)    = GT
+  compare (Sequence _ a b)  (Sequence _ a' b') = if EQ == compare a a' then compare b b' else compare a a'
+  compare (Sequence _ _ _)  (Anchor _ _ _)     = LT
+
+  compare (Anchor _ _ _)    (Scalar _ _)       = GT
+  compare (Anchor _ _ _)    (Mapping _ _ _)    = GT
+  compare (Anchor _ _ _)    (Sequence _ _ _)   = GT
+  compare (Anchor _ a b)    (Anchor _ a' b')   = if EQ == compare a a' then compare b b' else compare a a'
 
 -- | YAML mapping
-type Mapping = Map Node Node
+type Mapping = Map (Node Pos) (Node Pos)
 
 -- | Retrieve value in 'Mapping' indexed by a @!!str@ 'Text' key.
 --
 -- This parser fails if the key doesn't exist.
 (.:) :: FromYAML a => Mapping -> Text -> Parser a
-m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (Scalar (SStr k)) m)
+m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
 --
@@ -135,7 +165,7 @@ m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (
 --
 -- See also '.:!'.
 (.:?) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
-m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar (SStr k)) m)
+m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
 --
@@ -144,12 +174,14 @@ m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar (SStr k)) m)
 --
 -- __NOTE__: This is a variant of '.:?' which doesn't map a @tag:yaml.org,2002:null@ node to 'Nothing'.
 (.:!) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
-m .:! k = maybe (pure Nothing) (fmap Just . parseYAML) (Map.lookup (Scalar (SStr k)) m)
+m .:! k = maybe (pure Nothing) (fmap Just . parseYAML) (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Defaulting helper to be used with '.:?' or '.:!'.
 (.!=) :: Parser (Maybe a) -> a -> Parser a
 mv .!= def = fmap (maybe def id) mv
 
+fakePos :: Pos
+fakePos = Pos { posByteOffset = -1 , posCharOffset = -1  , posLine = 1 , posColumn = 0 }
 
 -- | Parse and decode YAML document(s) into 'Node' graphs
 --
@@ -163,7 +195,7 @@ mv .!= def = fmap (maybe def id) mv
 -- * Don't create 'Anchor' nodes
 -- * Disallow cyclic anchor references
 --
-decodeNode :: BS.L.ByteString -> Either (Pos, String) [Doc Node]
+decodeNode :: BS.L.ByteString -> Either String [Doc (Node Pos)]
 decodeNode = decodeNode' coreSchemaResolver False False
 
 
@@ -173,18 +205,18 @@ decodeNode' :: SchemaResolver  -- ^ YAML Schema resolver to use
             -> Bool            -- ^ Whether to emit anchor nodes
             -> Bool            -- ^ Whether to allow cyclic references
             -> BS.L.ByteString -- ^ YAML document to parse
-            -> Either (Pos, String) [Doc Node]
+            -> Either String [Doc (Node Pos)]
 decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
   = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
   where
-    failsafeLoader = Loader { yScalar   = \t s v _-> pure $ fmap Scalar (schemaResolverScalar t s v)
-                            , ySequence = \t vs _ -> pure $ schemaResolverSequence t >>= \t' -> Right (Sequence t' vs)
-                            , yMapping  = \t kvs _-> pure $ schemaResolverMapping  t >>= \t' -> (Mapping t' <$> mkMap kvs)
+    failsafeLoader = Loader { yScalar   = \t s v pos-> pure $ fmap (Scalar pos) (schemaResolverScalar t s v)
+                            , ySequence = \t vs pos -> pure $ schemaResolverSequence t >>= \t' -> Right (Sequence pos t' vs )
+                            , yMapping  = \t kvs pos-> pure $ schemaResolverMapping  t >>= \t' -> (Mapping pos t' <$> mkMap kvs)
                             , yAlias    = if allowCycles
                                           then \_ _ n _-> pure $ Right n
                                           else \_ c n _-> pure $ if c then Left "cycle detected" else Right n
                             , yAnchor   = if anchorNodes
-                                          then \j n _  -> pure $ Right (Anchor j n)
+                                          then \j n pos  -> pure $ Right (Anchor pos j n)
                                           else \_ n _  -> pure $ Right n
                             }
 
@@ -256,63 +288,68 @@ parseEither = unP
 --
 -- @since 0.1.1.0
 typeMismatch :: String   -- ^ descriptive name of expected data
-             -> Node     -- ^ actual node
+             -> Node Pos     -- ^ actual node
              -> Parser a
-typeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ got)
+typeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ got ++ " at " ++ position)
   where
     got = case node of
-            Scalar (SBool _)             -> "!!bool"
-            Scalar (SInt _)              -> "!!int"
-            Scalar  SNull                -> "!!null"
-            Scalar (SStr _)              -> "!!str"
-            Scalar (SFloat _)            -> "!!float"
-            Scalar (SUnknown t v)
-              | isUntagged t             -> tagged t ++ show v
-              | otherwise                -> "(unsupported) " ++ tagged t ++ "scalar"
-            (Anchor _ _)                 -> "anchor"
-            (Mapping t _)                -> tagged t ++ " mapping"
-            (Sequence t _)               -> tagged t ++ " sequence"
+            Scalar _ (SBool _)             -> "!!bool"  
+            Scalar _ (SInt _)              -> "!!int"   
+            Scalar _  SNull                -> "!!null"  
+            Scalar _ (SStr _)              -> "!!str"   
+            Scalar _ (SFloat _)            -> "!!float" 
+            Scalar _ (SUnknown t v)
+              | isUntagged t               -> tagged t ++ show v
+              | otherwise                  -> "(unsupported) " ++ tagged t ++ "scalar"
+            Anchor _ _ _                   -> "anchor"
+            Mapping _ t _                  -> tagged t ++ " mapping"
+            Sequence _ t _                 -> tagged t ++ " sequence"
 
     tagged t0 = case tagToText t0 of
                Nothing -> "non-specifically ? tagged (i.e. unresolved) "
                Just t  -> T.unpack t ++ " tagged"
+    position = case node of 
+              Scalar pos _                -> show pos
+              Anchor pos _ _              -> show pos
+              Mapping pos _ _             -> show pos
+              Sequence pos _ _            -> show pos
 
 -- | A type into which YAML nodes can be converted/deserialized
 class FromYAML a where
-  parseYAML :: Node -> Parser a
+  parseYAML :: Node Pos -> Parser a
 
 -- | Operate on @tag:yaml.org,2002:null@ node (or fail)
-withNull :: String -> Parser a -> Node -> Parser a
-withNull _        f (Scalar SNull) = f
+withNull :: String -> Parser a -> Node Pos -> Parser a
+withNull _        f (Scalar _ SNull) = f
 withNull expected _ v              = typeMismatch expected v
 
 
 -- | Trivial instance
-instance FromYAML Node where
+instance FromYAML (Node Pos) where
   parseYAML = pure
 
 instance FromYAML Bool where
   parseYAML = withBool "!!bool" pure
 
 -- | Operate on @tag:yaml.org,2002:bool@ node (or fail)
-withBool :: String -> (Bool -> Parser a) -> Node -> Parser a
-withBool _        f (Scalar (SBool b)) = f b
+withBool :: String -> (Bool -> Parser a) -> Node Pos -> Parser a
+withBool _        f (Scalar _ (SBool b)) = f b
 withBool expected _ v                  = typeMismatch expected v
 
 instance FromYAML Text where
   parseYAML = withStr "!!str" pure
 
 -- | Operate on @tag:yaml.org,2002:str@ node (or fail)
-withStr :: String -> (Text -> Parser a) -> Node -> Parser a
-withStr _        f (Scalar (SStr b)) = f b
+withStr :: String -> (Text -> Parser a) -> Node Pos -> Parser a
+withStr _        f (Scalar _ (SStr b)) = f b
 withStr expected _ v                 = typeMismatch expected v
 
 instance FromYAML Integer where
   parseYAML = withInt "!!int" pure
 
 -- | Operate on @tag:yaml.org,2002:int@ node (or fail)
-withInt :: String -> (Integer -> Parser a) -> Node -> Parser a
-withInt _        f (Scalar (SInt b)) = f b
+withInt :: String -> (Integer -> Parser a) -> Node Pos -> Parser a
+withInt _        f (Scalar _ (SInt b)) = f b
 withInt expected _ v                 = typeMismatch expected v
 
 -- | @since 0.1.1.0
@@ -322,7 +359,7 @@ instance FromYAML Natural where
 
 -- helper for fixed-width integers
 {-# INLINE parseInt #-}
-parseInt :: (Integral a, Bounded a) => [Char] -> Node -> Parser a
+parseInt :: (Integral a, Bounded a) => [Char] -> Node Pos -> Parser a
 parseInt name = withInt "!!int" $ \b -> maybe (fail $ "!!int " ++ show b ++ " out of range for '" ++ name ++ "'") pure $
                                         fromIntegerMaybe b
 
@@ -342,8 +379,8 @@ instance FromYAML Double where
   parseYAML = withFloat "!!float" pure
 
 -- | Operate on @tag:yaml.org,2002:float@ node (or fail)
-withFloat :: String -> (Double -> Parser a) -> Node -> Parser a
-withFloat _        f (Scalar (SFloat b)) = f b
+withFloat :: String -> (Double -> Parser a) -> Node Pos -> Parser a
+withFloat _        f (Scalar _ (SFloat b)) = f b
 withFloat expected _ v                   = typeMismatch expected v
 
 
@@ -351,8 +388,8 @@ instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
   parseYAML = withMap "!!map" $ \xs -> Map.fromList <$> mapM (\(a,b) -> (,) <$> parseYAML a <*> parseYAML b) (Map.toList xs)
 
 -- | Operate on @tag:yaml.org,2002:map@ node (or fail)
-withMap :: String -> (Mapping -> Parser a) -> Node -> Parser a
-withMap _        f (Mapping tag xs)
+withMap :: String -> (Mapping -> Parser a) -> Node Pos -> Parser a
+withMap _        f (Mapping _ tag xs)
   | tag == tagMap    = f xs
 withMap expected _ v = typeMismatch expected v
 
@@ -360,13 +397,13 @@ instance FromYAML v => FromYAML [v] where
   parseYAML = withSeq "!!seq" (mapM parseYAML)
 
 -- | Operate on @tag:yaml.org,2002:seq@ node (or fail)
-withSeq :: String -> ([Node] -> Parser a) -> Node -> Parser a
-withSeq _        f (Sequence tag xs)
+withSeq :: String -> ([Node Pos] -> Parser a) -> Node Pos-> Parser a
+withSeq _        f (Sequence _ tag xs)
   | tag == tagSeq    = f xs
 withSeq expected _ v = typeMismatch expected v
 
 instance FromYAML a => FromYAML (Maybe a) where
-  parseYAML (Scalar SNull) = pure Nothing
+  parseYAML (Scalar _ SNull) = pure Nothing
   parseYAML j              = Just <$> parseYAML j
 
 ----------------------------------------------------------------------------
@@ -457,9 +494,7 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 -- UTF-32 (LE or BE) encoding (which is auto-detected).
 --
 decode :: FromYAML v => BS.L.ByteString -> Either String [v]
-decode bs0 = case decodeNode bs0 of
-      Left (_, err) -> Left err  
-      Right a  -> (Right a) >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 -- | Convenience wrapper over 'decode' expecting exactly one YAML document
 --
