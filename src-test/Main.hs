@@ -245,7 +245,9 @@ decodeAeson = fmap (map toProperValue) . decode'
   where
     -- TODO
     decode' :: FromYAML v => BS.L.ByteString -> Either String [v]
-    decode' bs0 = decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+    decode' bs0 = case decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 of
+                  Left (pos, err) -> Left (show pos ++ err) 
+                  Right a         -> Right a >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 
 -- | Try to convert 'Double' into 'Int64', return 'Nothing' if not

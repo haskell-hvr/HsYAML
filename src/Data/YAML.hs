@@ -135,19 +135,19 @@ instance Ord (Node loc) where
   compare (Scalar _ _)      (Anchor _ _ _)     = LT
 
   compare (Mapping _ _ _)   (Scalar _ _)       = GT
-  compare (Mapping _ a b)   (Mapping _ a' b')  = if EQ == compare a a' then compare b b' else compare a a'
+  compare (Mapping _ a b)   (Mapping _ a' b')  = compare (a,b) (a',b')
   compare (Mapping _ _ _)   (Sequence _ _ _)   = LT
   compare (Mapping _ _ _)   (Anchor _ _ _)     = LT
   
   compare (Sequence _ _ _)  (Scalar _ _)       = GT
   compare (Sequence _ _ _)  (Mapping _ _ _)    = GT
-  compare (Sequence _ a b)  (Sequence _ a' b') = if EQ == compare a a' then compare b b' else compare a a'
+  compare (Sequence _ a b)  (Sequence _ a' b') = compare (a,b) (a',b')
   compare (Sequence _ _ _)  (Anchor _ _ _)     = LT
 
   compare (Anchor _ _ _)    (Scalar _ _)       = GT
   compare (Anchor _ _ _)    (Mapping _ _ _)    = GT
   compare (Anchor _ _ _)    (Sequence _ _ _)   = GT
-  compare (Anchor _ a b)    (Anchor _ a' b')   = if EQ == compare a a' then compare b b' else compare a a'
+  compare (Anchor _ a b)    (Anchor _ a' b')   = compare (a,b) (a',b')
 
 -- | YAML mapping
 type Mapping = Map (Node Pos) (Node Pos)
@@ -195,7 +195,7 @@ fakePos = Pos { posByteOffset = -1 , posCharOffset = -1  , posLine = 1 , posColu
 -- * Don't create 'Anchor' nodes
 -- * Disallow cyclic anchor references
 --
-decodeNode :: BS.L.ByteString -> Either String [Doc (Node Pos)]
+decodeNode :: BS.L.ByteString -> Either (Pos, String) [Doc (Node Pos)]
 decodeNode = decodeNode' coreSchemaResolver False False
 
 
@@ -205,7 +205,7 @@ decodeNode' :: SchemaResolver  -- ^ YAML Schema resolver to use
             -> Bool            -- ^ Whether to emit anchor nodes
             -> Bool            -- ^ Whether to allow cyclic references
             -> BS.L.ByteString -- ^ YAML document to parse
-            -> Either String [Doc (Node Pos)]
+            -> Either (Pos, String) [Doc (Node Pos)]
 decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
   = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
   where
@@ -494,7 +494,9 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 -- UTF-32 (LE or BE) encoding (which is auto-detected).
 --
 decode :: FromYAML v => BS.L.ByteString -> Either String [v]
-decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+decode bs0 = case decodeNode bs0 of
+    Left (pos, err) -> Left (show pos ++ err)
+    Right a         -> Right a >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 -- | Convenience wrapper over 'decode' expecting exactly one YAML document
 --

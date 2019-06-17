@@ -144,7 +144,7 @@ data Pos = Pos
     , posCharOffset :: !Int -- ^ 0-based character (Unicode code-point) offset
     , posLine       :: !Int -- ^ 1-based line number
     , posColumn     :: !Int -- ^ 0-based character (Unicode code-point) column number
-    }  deriving (Eq, Ord, Show)
+    }  deriving (Eq, Show)
 
 -- | Convert 'Tag' to its string representation
 --
