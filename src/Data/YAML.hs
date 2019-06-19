@@ -54,8 +54,11 @@
 --
 module Data.YAML
     (
+      -- * 
+    ToYAML(..)
+    
       -- * Typeclass-based resolving/decoding
-      decode
+    ,  decode
     , decode1
     , decodeStrict
     , decode1Strict
@@ -531,3 +534,71 @@ decode1Strict :: FromYAML v => BS.ByteString -> Either String v
 decode1Strict text = do
   vs <- decodeStrict text
   maybe (Left "expected unique") Right $ listToMaybe vs
+
+
+
+-- | A type from which YAML nodes can be constructed
+--
+-- @since 0.2.0.0
+class ToYAML a where
+-- | Convert a Haskell value to a YAML Node data type.
+  toYAML :: a -> Node ()
+
+-- | Trivial instance
+instance ToYAML (Node ()) where
+  toYAML = id
+
+instance ToYAML Bool where
+  toYAML = Scalar () . SBool
+
+instance ToYAML Double where
+  toYAML = Scalar () . SFloat
+
+instance ToYAML Int     where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int8    where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int16   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int32   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int64   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word    where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word8   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word16  where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word32  where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word64  where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Natural where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Integer where toYAML = Scalar () . SInt
+
+
+instance ToYAML Text where
+  toYAML = Scalar () . SStr
+
+instance ToYAML a => ToYAML (Maybe a) where
+  toYAML Nothing = Scalar () SNull
+  toYAML (Just a) = toYAML a
+
+instance (ToYAML a, ToYAML b) => ToYAML (Either a b) where
+    toYAML (Left a)  = toYAML a
+    toYAML (Right b) = toYAML b
+
+instance ToYAML a => ToYAML [a] where
+  toYAML = Sequence () tagSeq . map toYAML
+
+instance (Ord k, ToYAML k, ToYAML v) => ToYAML (Map k v) where
+  toYAML kv = Mapping () tagMap (Map.fromList $ map (\(k,v) -> (toYAML k , toYAML v)) (Map.toList kv)) 
+
+instance (ToYAML a, ToYAML b) => ToYAML (a, b) where
+  toYAML (a,b) = toYAML [toYAML a, toYAML b]
+
+instance (ToYAML a, ToYAML b, ToYAML c) => ToYAML (a, b, c) where
+  toYAML (a,b,c) = toYAML [toYAML a, toYAML b, toYAML c]
+
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d) => ToYAML (a, b, c, d) where
+  toYAML (a,b,c,d) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d]
+  
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e) => ToYAML (a, b, c, d, e) where
+  toYAML (a,b,c,d,e) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e]
+  
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f) => ToYAML (a, b, c, d, e, f) where
+  toYAML (a,b,c,d,e,f) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f]
+  
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) => ToYAML (a, b, c, d, e, f, g) where
+  toYAML (a,b,c,d,e,f,g) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f, toYAML g]
