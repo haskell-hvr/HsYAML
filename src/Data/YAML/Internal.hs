@@ -2,16 +2,22 @@
 
 module Data.YAML.Internal
     ( Node(..)
+    , NodeId
+    , Doc(..)
+    , Mapping
     ) where
 
-
--- import qualified Data.Text       as T
--- import qualified Data.YAML.Token as Y
 import           Data.YAML.Event       (Tag)
 import           Data.YAML.Schema
 import           Data.YAML.Loader
 
 import           Util
+
+-- | YAML Document tree/graph
+newtype Doc n = Doc n deriving (Eq,Ord,Show)
+
+-- | YAML mapping
+type Mapping loc = Map (Node loc) (Node loc)
 
 -- | YAML Document node
 data Node loc 

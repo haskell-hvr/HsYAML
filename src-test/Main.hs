@@ -544,7 +544,7 @@ printNode node = case node of
                               hPutStrLn stdout $  "Sequence " ++ show a 
                               (mapM_ printNode b)
     (Y.Anchor _ a b)    -> do
-                              hPutStrLn stdout $  "Anchor "   ++ show a 
+                              hPutStr stdout $  "Anchor "   ++ show a ++ " "
                               printNode b
 
 printMap :: Map (Node loc) (Node loc) -> IO ()

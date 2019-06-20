@@ -118,16 +118,10 @@ import           Data.YAML.Dumper
 
 import           Util
 
--- | YAML Document tree/graph
-newtype Doc n = Doc n deriving (Eq,Ord,Show)
-
--- | YAML mapping
-type Mapping = Map (Node Pos) (Node Pos)
-
 -- | Retrieve value in 'Mapping' indexed by a @!!str@ 'Text' key.
 --
 -- This parser fails if the key doesn't exist.
-(.:) :: FromYAML a => Mapping -> Text -> Parser a
+(.:) :: FromYAML a => Mapping Pos -> Text -> Parser a
 m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
@@ -136,7 +130,7 @@ m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (
 -- This combinator only fails if the key exists but cannot be converted to the required type.
 --
 -- See also '.:!'.
-(.:?) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
+(.:?) :: FromYAML a => Mapping Pos -> Text -> Parser (Maybe a)
 m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
@@ -145,21 +139,12 @@ m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar fakePos (SStr k)) m
 -- This combinator only fails if the key exists but cannot be converted to the required type.
 --
 -- __NOTE__: This is a variant of '.:?' which doesn't map a @tag:yaml.org,2002:null@ node to 'Nothing'.
-(.:!) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
+(.:!) :: FromYAML a => Mapping Pos -> Text -> Parser (Maybe a)
 m .:! k = maybe (pure Nothing) (fmap Just . parseYAML) (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Defaulting helper to be used with '.:?' or '.:!'.
 (.!=) :: Parser (Maybe a) -> a -> Parser a
 mv .!= def = fmap (maybe def id) mv
-
-
--- -- | A key\/value pair for an 'Object'.
--- type Pair = (Text, Node ())
-
--- -- | Construct a 'Pair' from a key and a value.
--- (.=) :: ToYAML a => Text -> a -> Pair
--- name .= node = (name, toYAML node)
-
 
 fakePos :: Pos
 fakePos = Pos { posByteOffset = -1 , posCharOffset = -1  , posLine = 1 , posColumn = 0 }
@@ -369,7 +354,7 @@ instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
   parseYAML = withMap "!!map" $ \xs -> Map.fromList <$> mapM (\(a,b) -> (,) <$> parseYAML a <*> parseYAML b) (Map.toList xs)
 
 -- | Operate on @tag:yaml.org,2002:map@ node (or fail)
-withMap :: String -> (Mapping -> Parser a) -> Node Pos -> Parser a
+withMap :: String -> (Mapping Pos -> Parser a) -> Node Pos -> Parser a
 withMap _        f (Mapping _ tag xs)
   | tag == tagMap    = f xs
 withMap expected _ v = typeMismatch expected v
@@ -520,7 +505,7 @@ decode1Strict text = do
 -- @since 0.2.0.0
 class ToYAML a where
   toYAML :: a -> Node () -- ^ Convert a Haskell value to a YAML Node data type.
-  
+
 -- | Trivial instance
 instance ToYAML (Node ()) where
   toYAML = id
