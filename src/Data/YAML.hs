@@ -54,11 +54,14 @@
 --
 module Data.YAML
     (
-      -- * 
-    ToYAML(..)
-    
+      -- * Typeclass-based dumping
+      ToYAML(..)
+    , dumpYAML
+    , dumpYAML'
+    , dumpEvents
+
       -- * Typeclass-based resolving/decoding
-    ,  decode
+    , decode
     , decode1
     , decodeStrict
     , decode1Strict
@@ -107,50 +110,16 @@ import qualified Data.Map             as Map
 import           Data.Maybe           (listToMaybe)
 import qualified Data.Text            as T
 
-import           Data.YAML.Event      (Tag, isUntagged, tagToText, Pos(..))
+import           Data.YAML.Event      (isUntagged, tagToText, Pos(..))
 import           Data.YAML.Loader
 import           Data.YAML.Schema
+import           Data.YAML.Internal
+import           Data.YAML.Dumper
 
 import           Util
 
 -- | YAML Document tree/graph
 newtype Doc n = Doc n deriving (Eq,Ord,Show)
-
--- | YAML Document node
-data Node loc 
-          = Scalar   !loc !Scalar 
-          | Mapping  !loc !Tag (Map (Node loc) (Node loc)) 
-          | Sequence !loc !Tag [Node loc] 
-          | Anchor   !loc !NodeId !(Node loc) 
-          deriving (Show)
-
-instance Eq (Node loc) where
-  Scalar   _ a    ==  Scalar   _ a'    = a == a' 
-  Mapping  _ a b  ==  Mapping  _ a' b' = a == a' && b == b'
-  Sequence _ a b  ==  Sequence _ a' b' = a == a' && b == b'
-  Anchor   _ a b  ==  Anchor   _ a' b' = a == a' && b == b'
-  _ == _ = False
-
-instance Ord (Node loc) where
-  compare (Scalar _ a)      (Scalar _ a')      = compare a a'
-  compare (Scalar _ _)      (Mapping _ _ _)    = LT
-  compare (Scalar _ _)      (Sequence _ _ _)   = LT
-  compare (Scalar _ _)      (Anchor _ _ _)     = LT
-
-  compare (Mapping _ _ _)   (Scalar _ _)       = GT
-  compare (Mapping _ a b)   (Mapping _ a' b')  = compare (a,b) (a',b')
-  compare (Mapping _ _ _)   (Sequence _ _ _)   = LT
-  compare (Mapping _ _ _)   (Anchor _ _ _)     = LT
-  
-  compare (Sequence _ _ _)  (Scalar _ _)       = GT
-  compare (Sequence _ _ _)  (Mapping _ _ _)    = GT
-  compare (Sequence _ a b)  (Sequence _ a' b') = compare (a,b) (a',b')
-  compare (Sequence _ _ _)  (Anchor _ _ _)     = LT
-
-  compare (Anchor _ _ _)    (Scalar _ _)       = GT
-  compare (Anchor _ _ _)    (Mapping _ _ _)    = GT
-  compare (Anchor _ _ _)    (Sequence _ _ _)   = GT
-  compare (Anchor _ a b)    (Anchor _ a' b')   = compare (a,b) (a',b')
 
 -- | YAML mapping
 type Mapping = Map (Node Pos) (Node Pos)
@@ -182,6 +151,15 @@ m .:! k = maybe (pure Nothing) (fmap Just . parseYAML) (Map.lookup (Scalar fakeP
 -- | Defaulting helper to be used with '.:?' or '.:!'.
 (.!=) :: Parser (Maybe a) -> a -> Parser a
 mv .!= def = fmap (maybe def id) mv
+
+
+-- -- | A key\/value pair for an 'Object'.
+-- type Pair = (Text, Node ())
+
+-- -- | Construct a 'Pair' from a key and a value.
+-- (.=) :: ToYAML a => Text -> a -> Pair
+-- name .= node = (name, toYAML node)
+
 
 fakePos :: Pos
 fakePos = Pos { posByteOffset = -1 , posCharOffset = -1  , posLine = 1 , posColumn = 0 }
@@ -541,12 +519,18 @@ decode1Strict text = do
 --
 -- @since 0.2.0.0
 class ToYAML a where
--- | Convert a Haskell value to a YAML Node data type.
-  toYAML :: a -> Node ()
-
+  toYAML :: a -> Node () -- ^ Convert a Haskell value to a YAML Node data type.
+  
 -- | Trivial instance
 instance ToYAML (Node ()) where
   toYAML = id
+
+instance ToYAML (Node Pos) where
+  toYAML node = case node of
+      Scalar   _ scalar -> Scalar () scalar
+      Mapping  _ tag m  -> Mapping () tag (Map.fromList $ map (\(k,v) -> (toYAML k , toYAML v)) (Map.toList m)) 
+      Sequence _ tag s  -> Sequence () tag (map toYAML s)
+      Anchor   _ n nod  -> Anchor () n (toYAML nod)
 
 instance ToYAML Bool where
   toYAML = Scalar () . SBool
@@ -602,3 +586,6 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f) => ToYAML 
   
 instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) => ToYAML (a, b, c, d, e, f, g) where
   toYAML (a,b,c,d,e,f,g) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f, toYAML g]
+
+
+
