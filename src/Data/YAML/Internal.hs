@@ -8,8 +8,8 @@ module Data.YAML.Internal
     ) where
 
 import           Data.YAML.Event       (Tag)
-import           Data.YAML.Schema
-import           Data.YAML.Loader
+import           Data.YAML.Schema      (Scalar(..))
+import           Data.YAML.Loader      (NodeId)
 
 import           Util
 
@@ -22,7 +22,7 @@ type Mapping loc = Map (Node loc) (Node loc)
 -- | YAML Document node
 data Node loc 
           = Scalar   !loc !Scalar 
-          | Mapping  !loc !Tag (Map (Node loc) (Node loc)) 
+          | Mapping  !loc !Tag (Mapping loc) 
           | Sequence !loc !Tag [Node loc] 
           | Anchor   !loc !NodeId !(Node loc) 
           deriving (Show)

@@ -542,7 +542,7 @@ printNode node = case node of
                               printMap b
     (Y.Sequence _ a b)  -> do 
                               hPutStrLn stdout $  "Sequence " ++ show a 
-                              (mapM_ printNode b)
+                              mapM_ printNode b
     (Y.Anchor _ a b)    -> do
                               hPutStr stdout $  "Anchor "   ++ show a ++ " "
                               printNode b
