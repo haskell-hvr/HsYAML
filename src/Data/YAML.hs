@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE Safe              #-}
 {-# LANGUAGE CPP               #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs             #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -296,7 +296,7 @@ withNull expected _ v              = typeMismatch expected v
 
 
 -- | Trivial instance
-instance FromYAML (Node Pos) where
+instance (loc ~ Pos) => FromYAML (Node loc) where
   parseYAML = pure
 
 instance FromYAML Bool where
@@ -511,16 +511,8 @@ decode1Strict text = do
 class ToYAML a where
   toYAML :: a -> Node () -- ^ Convert a Haskell value to a YAML Node data type.
 
--- | Trivial instance
-instance ToYAML (Node ()) where
-  toYAML = id
-
-instance ToYAML (Node Pos) where
-  toYAML node = case node of
-      Scalar   _ scalar -> Scalar () scalar
-      Mapping  _ tag m  -> Mapping () tag (Map.fromList $ map (\(k,v) -> (toYAML k , toYAML v)) (Map.toList m)) 
-      Sequence _ tag s  -> Sequence () tag (map toYAML s)
-      Anchor   _ n nod  -> Anchor () n (toYAML nod)
+instance Loc loc => ToYAML (Node loc) where
+  toYAML = toUnit
 
 instance ToYAML Bool where
   toYAML = Scalar () . SBool
@@ -596,6 +588,17 @@ encode1 a = encode [a]
 -- -- | Like 'encode' but outputs 'BS.ByteString'
 -- --
 -- -- @since 0.2.0
+
+
+
+-- | Internal helper
+class Loc loc where
+  toUnit :: Functor f => f loc -> f ()
+  toUnit = (() <$)
+
+instance Loc Pos
+
+instance Loc () where toUnit = id
 -- encodeStrict :: ToYAML v => [v] -> BS.ByteString 
 -- encodeStrict = BS.L.toStrict . encode
 

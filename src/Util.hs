@@ -24,6 +24,7 @@ module Util
 
 import           Control.Applicative          as X
 import           Control.Monad                as X
+import           Data.Functor                 as X
 import           Data.Int                     as X
 import           Data.Word                    as X
 import           Numeric.Natural              as X (Natural)
