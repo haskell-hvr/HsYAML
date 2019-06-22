@@ -3,8 +3,8 @@
 
 
 module Data.YAML.Dumper
-    ( dumpYAML
-    , dumpYAML'
+    ( encodeNode
+    -- , encodeNode'
     , dumpEvents
     ) where
 
@@ -14,26 +14,34 @@ import           Data.YAML.Schema         as YS
 import           Data.YAML.Event.Writer   (writeEvents)
 
 import qualified Data.ByteString.Lazy     as BS.L
-import           Data.Map                 as Map
+import qualified Data.Map                 as Map
 import qualified Data.Text                as T
 
 
 type EvList = [Either String Event]
 type Node2EvList = [Node ()] -> EvList
 
--- | Dump YAML Nodes using specified UTF encoding to a lazy 'BS.L.ByteString'
+-- | Dump YAML Nodes as a lazy 'BS.L.ByteString'
+--
+-- Each YAML 'Node' is emitted as a individual YAML Document where each Document is terminated by a 'DocumentEnd' indicator.
+--
+-- This is a convenience wrapper over `encodeNode'`
 --
 -- @since 0.2.0
-dumpYAML ::  Encoding -> [Node ()] -> BS.L.ByteString
-dumpYAML encoding nodes = writeEvents encoding $ case sequence (dumpEvents nodes) of
+encodeNode :: [Doc (Node ())] -> BS.L.ByteString
+encodeNode nodes = writeEvents UTF8 $ case sequence (dumpEvents (map getDoc nodes)) of
     Left str -> error str
     Right ev -> ev
 
--- | Convenience wrapper over 'dumpYAML' expecting exactly one YAML node
---
--- @since 0.2.0
-dumpYAML' ::  Encoding -> Node () -> BS.L.ByteString
-dumpYAML' encoding node = dumpYAML encoding [node] 
+-- encodeNode = encodeNode' coreSchemaResolver UTF8  -- TODO
+
+-- -- | Customizable variant of 'encodeNode'
+-- --
+-- -- @since 0.2.0
+-- encodeNode' :: SchemaResolver -> Encoding -> [Doc (Node ())] -> BS.L.ByteString
+-- encodeNode' _ encoding nodes = writeEvents encoding $ case sequence (dumpEvents (map getDoc nodes)) of   -- TODO
+--     Left str -> error str
+--     Right ev -> ev
 
 dumpEvents :: Node2EvList
 dumpEvents nodes = Right StreamStart: go0 nodes
@@ -74,7 +82,7 @@ dumpEvents nodes = Right StreamStart: go0 nodes
       where 
         g []    = (Right MappingEnd) : isDocEnd (lvl - 1) rest cont
         g rest' = goNode lvl rest' g 
-        mapToList = foldrWithKey (\k v a -> k : v : a) []
+        mapToList = Map.foldrWithKey (\k v a -> k : v : a) []
 
     goSeq :: Int -> [Node ()] -> [Node ()] -> Node2EvList -> EvList
     goSeq lvl nod rest cont = goNode lvl nod g

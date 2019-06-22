@@ -14,7 +14,7 @@ import           Data.YAML.Loader      (NodeId)
 import           Util
 
 -- | YAML Document tree/graph
-newtype Doc n = Doc n deriving (Eq,Ord,Show)
+newtype Doc n = Doc { getDoc :: n } deriving (Eq,Ord,Show)
 
 -- | YAML mapping
 type Mapping loc = Map (Node loc) (Node loc)

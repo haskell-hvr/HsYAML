@@ -249,7 +249,7 @@ cmdDumpYAML = do
       hPutStrLn stdout str
       hFlush stdout
     Right nodes -> do
-      BS.L.hPutStrLn stdout (dumpYAML YT.UTF8 (map toYAML nodes))
+      BS.L.hPutStrLn stdout $ encode nodes
       hFlush stdout
 
 -- | 'J.Value' look-alike

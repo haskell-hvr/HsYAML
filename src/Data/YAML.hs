@@ -55,10 +55,15 @@
 module Data.YAML
     (
       -- * Typeclass-based dumping
-      ToYAML(..)
-    , dumpYAML
-    , dumpYAML'
-    , dumpEvents
+      encode
+    , encode1
+    -- , encodeStrict
+    -- , encode1Strict
+     
+    , ToYAML(..)
+    , encodeNode
+    -- , encodeNode'
+    , dumpEvents -- TODO: Don't export this function
 
       -- * Typeclass-based resolving/decoding
     , decode
@@ -544,9 +549,9 @@ instance ToYAML a => ToYAML (Maybe a) where
   toYAML Nothing = Scalar () SNull
   toYAML (Just a) = toYAML a
 
-instance (ToYAML a, ToYAML b) => ToYAML (Either a b) where
-    toYAML (Left a)  = toYAML a
-    toYAML (Right b) = toYAML b
+-- instance (ToYAML a, ToYAML b) => ToYAML (Either a b) where
+--     toYAML (Left a)  = toYAML a
+--     toYAML (Right b) = toYAML b
 
 instance ToYAML a => ToYAML [a] where
   toYAML = Sequence () tagSeq . map toYAML
@@ -574,3 +579,28 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
 
 
 
+-- | Serialize YAML Node(s) using the YAML 1.2 Core schema as a lazy 'BS.L.ByteString'.
+--
+-- Each YAML Node produces exactly one YAML Document.
+--
+-- @since 0.2.0
+encode :: ToYAML v => [v] -> BS.L.ByteString 
+encode vList = encodeNode $ map (Doc . toYAML) vList
+
+-- | Convenience wrapper over 'encode' expecting exactly one YAML Node
+--
+-- @since 0.2.0
+encode1 :: ToYAML v => v -> BS.L.ByteString 
+encode1 a = encode [a]
+
+-- -- | Like 'encode' but outputs 'BS.ByteString'
+-- --
+-- -- @since 0.2.0
+-- encodeStrict :: ToYAML v => [v] -> BS.ByteString 
+-- encodeStrict = BS.L.toStrict . encode
+
+-- -- | Like 'encode1' but but outputs 'BS.ByteString'
+-- --
+-- -- @since 0.2.0
+-- encode1Strict :: ToYAML v => v -> BS.ByteString 
+-- encode1Strict = BS.L.toStrict . encode1
