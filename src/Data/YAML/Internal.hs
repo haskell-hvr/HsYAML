@@ -7,6 +7,8 @@ module Data.YAML.Internal
     , Mapping
     ) where
 
+import qualified Data.Map              as Map
+
 import           Data.YAML.Event       (Tag)
 import           Data.YAML.Schema      (Scalar(..))
 import           Data.YAML.Loader      (NodeId)
@@ -20,15 +22,25 @@ newtype Doc n = Doc { getDoc :: n } deriving (Eq,Ord,Show)
 type Mapping loc = Map (Node loc) (Node loc)
 
 -- | YAML Document node
-data Node loc 
-          = Scalar   !loc !Scalar 
-          | Mapping  !loc !Tag (Mapping loc) 
-          | Sequence !loc !Tag [Node loc] 
-          | Anchor   !loc !NodeId !(Node loc) 
-          deriving (Show)
+data Node loc
+  = Scalar   !loc !Scalar
+  | Mapping  !loc !Tag (Mapping loc)
+  | Sequence !loc !Tag [Node loc]
+  | Anchor   !loc !NodeId !(Node loc)
+  deriving (Show)
+
+instance Functor Node where
+  fmap f node = case node of
+    Scalar   x scalar -> Scalar   (f x) scalar
+    Mapping  x tag m  -> Mapping  (f x) tag (mappingFmapLoc f m)
+    Sequence x tag s  -> Sequence (f x) tag (map (fmap f) s)
+    Anchor   x n nod  -> Anchor   (f x) n (fmap f nod)
+
+mappingFmapLoc :: (a -> b) -> Mapping a -> Mapping b
+mappingFmapLoc f = Map.mapKeysMonotonic (fmap f) . Map.map (fmap f)
 
 instance Eq (Node loc) where
-  Scalar   _ a    ==  Scalar   _ a'    = a == a' 
+  Scalar   _ a    ==  Scalar   _ a'    = a == a'
   Mapping  _ a b  ==  Mapping  _ a' b' = a == a' && b == b'
   Sequence _ a b  ==  Sequence _ a' b' = a == a' && b == b'
   Anchor   _ a b  ==  Anchor   _ a' b' = a == a' && b == b'
@@ -44,7 +56,7 @@ instance Ord (Node loc) where
   compare (Mapping _ a b)   (Mapping _ a' b')  = compare (a,b) (a',b')
   compare (Mapping _ _ _)   (Sequence _ _ _)   = LT
   compare (Mapping _ _ _)   (Anchor _ _ _)     = LT
-  
+
   compare (Sequence _ _ _)  (Scalar _ _)       = GT
   compare (Sequence _ _ _)  (Mapping _ _ _)    = GT
   compare (Sequence _ a b)  (Sequence _ a' b') = compare (a,b) (a',b')
