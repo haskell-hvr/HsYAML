@@ -332,14 +332,17 @@ initialState input
 -- | @setLimit limit state@ sets the @sLimit@ field to /limit/.
 setLimit :: Int -> State -> State
 setLimit limit state = state { sLimit = limit }
+{-# INLINE setLimit #-}
 
 -- | @setForbidden forbidden state@ sets the @sForbidden@ field to /forbidden/.
 setForbidden :: Maybe Pattern -> State -> State
 setForbidden forbidden state = state { sForbidden = forbidden }
+{-# INLINE setForbidden #-}
 
 -- | @setCode code state@ sets the @sCode@ field to /code/.
 setCode :: Code -> State -> State
 setCode code state = state { sCode = code }
+{-# INLINE setCode #-}
 
 -- ** Implicit parsers
 --
@@ -700,7 +703,7 @@ empty = return ()
 -- | @eof@ matches the end of the input.
 eof :: Pattern
 eof = Parser $ \ state ->
-  if state^.sInput == []
+  if null (state^.sInput)
      then returnReply state ()
      else unexpectedReply state
 
@@ -746,6 +749,7 @@ with setField getField value parser = Parser $ \ state ->
              Failed _     -> reply { rState = setField parentValue $ reply^.rState }
              Result _     -> reply { rState = setField parentValue $ reply^.rState }
              More parser' -> reply { rResult = More $ withParser parentValue parser' }
+{-# INLINE with #-}
 
 -- | @parser ``forbidding`` pattern@ parses the specified /parser/ ensuring
 -- that it does not contain anything matching the /forbidden/ parser.
@@ -802,7 +806,7 @@ nextIf test = Parser $ \ state ->
       where
         charsOf field charsField
           | state^.sIsPeek       = -1
-          | state^.sChars == []  = state^.field
+          | null (state^.sChars) = state^.field
           | otherwise            = state^.charsField
 
 -- ** Producing tokens
