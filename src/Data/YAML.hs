@@ -57,8 +57,8 @@ module Data.YAML
       -- * Typeclass-based dumping
       encode
     , encode1
-    -- , encodeStrict
-    -- , encode1Strict
+    , encodeStrict
+    , encode1Strict
 
     , ToYAML(..)
     , encodeNode
@@ -585,11 +585,17 @@ encode vList = encodeNode $ map (Doc . toYAML) vList
 encode1 :: ToYAML v => v -> BS.L.ByteString
 encode1 a = encode [a]
 
--- -- | Like 'encode' but outputs 'BS.ByteString'
--- --
--- -- @since 0.2.0
+-- | Like 'encode' but outputs 'BS.ByteString'
+--
+-- @since 0.2.0
+encodeStrict :: ToYAML v => [v] -> BS.ByteString
+encodeStrict = bsToStrict . encode
 
-
+-- | Like 'encode1' but but outputs 'BS.ByteString'
+--
+-- @since 0.2.0
+encode1Strict :: ToYAML v => v -> BS.ByteString
+encode1Strict = bsToStrict . encode1
 
 -- | Internal helper
 class Loc loc where
@@ -599,11 +605,3 @@ class Loc loc where
 instance Loc Pos
 
 instance Loc () where toUnit = id
--- encodeStrict :: ToYAML v => [v] -> BS.ByteString
--- encodeStrict = BS.L.toStrict . encode
-
--- -- | Like 'encode1' but but outputs 'BS.ByteString'
--- --
--- -- @since 0.2.0
--- encode1Strict :: ToYAML v => v -> BS.ByteString
--- encode1Strict = BS.L.toStrict . encode1

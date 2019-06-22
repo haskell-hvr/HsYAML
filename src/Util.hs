@@ -19,6 +19,8 @@ module Util
     , mapFromListNoDupes
     , mapInsertNoDupe
 
+    , bsToStrict
+
     , module X
     ) where
 
@@ -48,6 +50,8 @@ import           Data.Monoid                  ((<>))
 #endif
 import           Data.Set                     as X (Set)
 import           Data.Text                    as X (Text)
+import qualified Data.ByteString              as BS
+import qualified Data.ByteString.Lazy         as BS.L
 
 import           Text.ParserCombinators.ReadP as P
 import           Text.Read
@@ -98,3 +102,11 @@ mapInsertNoDupe kx x t = case Map.insertLookupWithKey (\_ a _ -> a) kx x t of
                            (Nothing, m) -> Just m
                            (Just _, _)  -> Nothing
 
+
+{-# INLINE bsToStrict #-}
+bsToStrict :: BS.L.ByteString -> BS.ByteString
+#if MIN_VERSION_bytestring(0,10,0)
+bsToStrict = BS.L.toStrict
+#else
+bsToStrict = BS.concat . BS.L.toChunks
+#endif
