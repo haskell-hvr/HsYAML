@@ -1,8 +1,8 @@
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE Safe              #-}
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE GADTs             #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -59,7 +59,7 @@ module Data.YAML
     , encode1
     -- , encodeStrict
     -- , encode1Strict
-     
+
     , ToYAML(..)
     , encodeNode
     -- , encodeNode'
@@ -115,11 +115,11 @@ import qualified Data.Map             as Map
 import           Data.Maybe           (listToMaybe)
 import qualified Data.Text            as T
 
-import           Data.YAML.Event      (isUntagged, tagToText, Pos(..))
+import           Data.YAML.Dumper
+import           Data.YAML.Event      (Pos (..), isUntagged, tagToText)
+import           Data.YAML.Internal
 import           Data.YAML.Loader
 import           Data.YAML.Schema
-import           Data.YAML.Internal
-import           Data.YAML.Dumper
 
 import           Util
 
@@ -264,11 +264,11 @@ typeMismatch :: String   -- ^ descriptive name of expected data
 typeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ got ++ " at " ++ position)
   where
     got = case node of
-            Scalar _ (SBool _)             -> "!!bool"  
-            Scalar _ (SInt _)              -> "!!int"   
-            Scalar _  SNull                -> "!!null"  
-            Scalar _ (SStr _)              -> "!!str"   
-            Scalar _ (SFloat _)            -> "!!float" 
+            Scalar _ (SBool _)             -> "!!bool"
+            Scalar _ (SInt _)              -> "!!int"
+            Scalar _  SNull                -> "!!null"
+            Scalar _ (SStr _)              -> "!!str"
+            Scalar _ (SFloat _)            -> "!!float"
             Scalar _ (SUnknown t v)
               | isUntagged t               -> tagged t ++ show v
               | otherwise                  -> "(unsupported) " ++ tagged t ++ "scalar"
@@ -279,11 +279,11 @@ typeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ 
     tagged t0 = case tagToText t0 of
                Nothing -> "non-specifically ? tagged (i.e. unresolved) "
                Just t  -> T.unpack t ++ " tagged"
-    position = case node of 
-              Scalar pos _                -> show pos
-              Anchor pos _ _              -> show pos
-              Mapping pos _ _             -> show pos
-              Sequence pos _ _            -> show pos
+    position = case node of
+              Scalar pos _     -> show pos
+              Anchor pos _ _   -> show pos
+              Mapping pos _ _  -> show pos
+              Sequence pos _ _ -> show pos
 
 -- | A type into which YAML nodes can be converted/deserialized
 class FromYAML a where
@@ -292,7 +292,7 @@ class FromYAML a where
 -- | Operate on @tag:yaml.org,2002:null@ node (or fail)
 withNull :: String -> Parser a -> Node Pos -> Parser a
 withNull _        f (Scalar _ SNull) = f
-withNull expected _ v              = typeMismatch expected v
+withNull expected _ v                = typeMismatch expected v
 
 
 -- | Trivial instance
@@ -305,7 +305,7 @@ instance FromYAML Bool where
 -- | Operate on @tag:yaml.org,2002:bool@ node (or fail)
 withBool :: String -> (Bool -> Parser a) -> Node Pos -> Parser a
 withBool _        f (Scalar _ (SBool b)) = f b
-withBool expected _ v                  = typeMismatch expected v
+withBool expected _ v                    = typeMismatch expected v
 
 instance FromYAML Text where
   parseYAML = withStr "!!str" pure
@@ -313,7 +313,7 @@ instance FromYAML Text where
 -- | Operate on @tag:yaml.org,2002:str@ node (or fail)
 withStr :: String -> (Text -> Parser a) -> Node Pos -> Parser a
 withStr _        f (Scalar _ (SStr b)) = f b
-withStr expected _ v                 = typeMismatch expected v
+withStr expected _ v                   = typeMismatch expected v
 
 instance FromYAML Integer where
   parseYAML = withInt "!!int" pure
@@ -321,7 +321,7 @@ instance FromYAML Integer where
 -- | Operate on @tag:yaml.org,2002:int@ node (or fail)
 withInt :: String -> (Integer -> Parser a) -> Node Pos -> Parser a
 withInt _        f (Scalar _ (SInt b)) = f b
-withInt expected _ v                 = typeMismatch expected v
+withInt expected _ v                   = typeMismatch expected v
 
 -- | @since 0.1.1.0
 instance FromYAML Natural where
@@ -352,7 +352,7 @@ instance FromYAML Double where
 -- | Operate on @tag:yaml.org,2002:float@ node (or fail)
 withFloat :: String -> (Double -> Parser a) -> Node Pos -> Parser a
 withFloat _        f (Scalar _ (SFloat b)) = f b
-withFloat expected _ v                   = typeMismatch expected v
+withFloat expected _ v                     = typeMismatch expected v
 
 
 instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
@@ -375,7 +375,7 @@ withSeq expected _ v = typeMismatch expected v
 
 instance FromYAML a => FromYAML (Maybe a) where
   parseYAML (Scalar _ SNull) = pure Nothing
-  parseYAML j              = Just <$> parseYAML j
+  parseYAML j                = Just <$> parseYAML j
 
 ----------------------------------------------------------------------------
 
@@ -538,7 +538,7 @@ instance ToYAML Text where
   toYAML = Scalar () . SStr
 
 instance ToYAML a => ToYAML (Maybe a) where
-  toYAML Nothing = Scalar () SNull
+  toYAML Nothing  = Scalar () SNull
   toYAML (Just a) = toYAML a
 
 -- instance (ToYAML a, ToYAML b) => ToYAML (Either a b) where
@@ -549,7 +549,7 @@ instance ToYAML a => ToYAML [a] where
   toYAML = Sequence () tagSeq . map toYAML
 
 instance (Ord k, ToYAML k, ToYAML v) => ToYAML (Map k v) where
-  toYAML kv = Mapping () tagMap (Map.fromList $ map (\(k,v) -> (toYAML k , toYAML v)) (Map.toList kv)) 
+  toYAML kv = Mapping () tagMap (Map.fromList $ map (\(k,v) -> (toYAML k , toYAML v)) (Map.toList kv))
 
 instance (ToYAML a, ToYAML b) => ToYAML (a, b) where
   toYAML (a,b) = toYAML [toYAML a, toYAML b]
@@ -559,13 +559,13 @@ instance (ToYAML a, ToYAML b, ToYAML c) => ToYAML (a, b, c) where
 
 instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d) => ToYAML (a, b, c, d) where
   toYAML (a,b,c,d) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d]
-  
+
 instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e) => ToYAML (a, b, c, d, e) where
   toYAML (a,b,c,d,e) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e]
-  
+
 instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f) => ToYAML (a, b, c, d, e, f) where
   toYAML (a,b,c,d,e,f) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f]
-  
+
 instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) => ToYAML (a, b, c, d, e, f, g) where
   toYAML (a,b,c,d,e,f,g) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f, toYAML g]
 
@@ -576,13 +576,13 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
 -- Each YAML Node produces exactly one YAML Document.
 --
 -- @since 0.2.0
-encode :: ToYAML v => [v] -> BS.L.ByteString 
+encode :: ToYAML v => [v] -> BS.L.ByteString
 encode vList = encodeNode $ map (Doc . toYAML) vList
 
 -- | Convenience wrapper over 'encode' expecting exactly one YAML Node
 --
 -- @since 0.2.0
-encode1 :: ToYAML v => v -> BS.L.ByteString 
+encode1 :: ToYAML v => v -> BS.L.ByteString
 encode1 a = encode [a]
 
 -- -- | Like 'encode' but outputs 'BS.ByteString'
@@ -599,11 +599,11 @@ class Loc loc where
 instance Loc Pos
 
 instance Loc () where toUnit = id
--- encodeStrict :: ToYAML v => [v] -> BS.ByteString 
+-- encodeStrict :: ToYAML v => [v] -> BS.ByteString
 -- encodeStrict = BS.L.toStrict . encode
 
 -- -- | Like 'encode1' but but outputs 'BS.ByteString'
 -- --
 -- -- @since 0.2.0
--- encode1Strict :: ToYAML v => v -> BS.ByteString 
+-- encode1Strict :: ToYAML v => v -> BS.ByteString
 -- encode1Strict = BS.L.toStrict . encode1
