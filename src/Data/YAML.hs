@@ -54,8 +54,19 @@
 --
 module Data.YAML
     (
+      -- * Typeclass-based dumping
+      encode
+    , encode1
+    -- , encodeStrict
+    -- , encode1Strict
+     
+    , ToYAML(..)
+    , encodeNode
+    -- , encodeNode'
+    , dumpEvents -- TODO: Don't export this function
+
       -- * Typeclass-based resolving/decoding
-      decode
+    , decode
     , decode1
     , decodeStrict
     , decode1Strict
@@ -104,58 +115,18 @@ import qualified Data.Map             as Map
 import           Data.Maybe           (listToMaybe)
 import qualified Data.Text            as T
 
-import           Data.YAML.Event      (Tag, isUntagged, tagToText, Pos(..))
+import           Data.YAML.Event      (isUntagged, tagToText, Pos(..))
 import           Data.YAML.Loader
 import           Data.YAML.Schema
+import           Data.YAML.Internal
+import           Data.YAML.Dumper
 
 import           Util
-
--- | YAML Document tree/graph
-newtype Doc n = Doc n deriving (Eq,Ord,Show)
-
--- | YAML Document node
-data Node loc 
-          = Scalar   !loc !Scalar 
-          | Mapping  !loc !Tag (Map (Node loc) (Node loc)) 
-          | Sequence !loc !Tag [Node loc] 
-          | Anchor   !loc !NodeId !(Node loc) 
-          deriving (Show)
-
-instance Eq (Node loc) where
-  Scalar   _ a    ==  Scalar   _ a'    = a == a' 
-  Mapping  _ a b  ==  Mapping  _ a' b' = a == a' && b == b'
-  Sequence _ a b  ==  Sequence _ a' b' = a == a' && b == b'
-  Anchor   _ a b  ==  Anchor   _ a' b' = a == a' && b == b'
-  _ == _ = False
-
-instance Ord (Node loc) where
-  compare (Scalar _ a)      (Scalar _ a')      = compare a a'
-  compare (Scalar _ _)      (Mapping _ _ _)    = LT
-  compare (Scalar _ _)      (Sequence _ _ _)   = LT
-  compare (Scalar _ _)      (Anchor _ _ _)     = LT
-
-  compare (Mapping _ _ _)   (Scalar _ _)       = GT
-  compare (Mapping _ a b)   (Mapping _ a' b')  = compare (a,b) (a',b')
-  compare (Mapping _ _ _)   (Sequence _ _ _)   = LT
-  compare (Mapping _ _ _)   (Anchor _ _ _)     = LT
-  
-  compare (Sequence _ _ _)  (Scalar _ _)       = GT
-  compare (Sequence _ _ _)  (Mapping _ _ _)    = GT
-  compare (Sequence _ a b)  (Sequence _ a' b') = compare (a,b) (a',b')
-  compare (Sequence _ _ _)  (Anchor _ _ _)     = LT
-
-  compare (Anchor _ _ _)    (Scalar _ _)       = GT
-  compare (Anchor _ _ _)    (Mapping _ _ _)    = GT
-  compare (Anchor _ _ _)    (Sequence _ _ _)   = GT
-  compare (Anchor _ a b)    (Anchor _ a' b')   = compare (a,b) (a',b')
-
--- | YAML mapping
-type Mapping = Map (Node Pos) (Node Pos)
 
 -- | Retrieve value in 'Mapping' indexed by a @!!str@ 'Text' key.
 --
 -- This parser fails if the key doesn't exist.
-(.:) :: FromYAML a => Mapping -> Text -> Parser a
+(.:) :: FromYAML a => Mapping Pos -> Text -> Parser a
 m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
@@ -164,7 +135,7 @@ m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (
 -- This combinator only fails if the key exists but cannot be converted to the required type.
 --
 -- See also '.:!'.
-(.:?) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
+(.:?) :: FromYAML a => Mapping Pos -> Text -> Parser (Maybe a)
 m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
@@ -173,7 +144,7 @@ m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar fakePos (SStr k)) m
 -- This combinator only fails if the key exists but cannot be converted to the required type.
 --
 -- __NOTE__: This is a variant of '.:?' which doesn't map a @tag:yaml.org,2002:null@ node to 'Nothing'.
-(.:!) :: FromYAML a => Mapping -> Text -> Parser (Maybe a)
+(.:!) :: FromYAML a => Mapping Pos -> Text -> Parser (Maybe a)
 m .:! k = maybe (pure Nothing) (fmap Just . parseYAML) (Map.lookup (Scalar fakePos (SStr k)) m)
 
 -- | Defaulting helper to be used with '.:?' or '.:!'.
@@ -388,7 +359,7 @@ instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
   parseYAML = withMap "!!map" $ \xs -> Map.fromList <$> mapM (\(a,b) -> (,) <$> parseYAML a <*> parseYAML b) (Map.toList xs)
 
 -- | Operate on @tag:yaml.org,2002:map@ node (or fail)
-withMap :: String -> (Mapping -> Parser a) -> Node Pos -> Parser a
+withMap :: String -> (Mapping Pos -> Parser a) -> Node Pos -> Parser a
 withMap _        f (Mapping _ tag xs)
   | tag == tagMap    = f xs
 withMap expected _ v = typeMismatch expected v
@@ -531,3 +502,105 @@ decode1Strict :: FromYAML v => BS.ByteString -> Either String v
 decode1Strict text = do
   vs <- decodeStrict text
   maybe (Left "expected unique") Right $ listToMaybe vs
+
+
+
+-- | A type from which YAML nodes can be constructed
+--
+-- @since 0.2.0.0
+class ToYAML a where
+  toYAML :: a -> Node () -- ^ Convert a Haskell value to a YAML Node data type.
+
+-- | Trivial instance
+instance ToYAML (Node ()) where
+  toYAML = id
+
+instance ToYAML (Node Pos) where
+  toYAML node = case node of
+      Scalar   _ scalar -> Scalar () scalar
+      Mapping  _ tag m  -> Mapping () tag (Map.fromList $ map (\(k,v) -> (toYAML k , toYAML v)) (Map.toList m)) 
+      Sequence _ tag s  -> Sequence () tag (map toYAML s)
+      Anchor   _ n nod  -> Anchor () n (toYAML nod)
+
+instance ToYAML Bool where
+  toYAML = Scalar () . SBool
+
+instance ToYAML Double where
+  toYAML = Scalar () . SFloat
+
+instance ToYAML Int     where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int8    where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int16   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int32   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Int64   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word    where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word8   where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word16  where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word32  where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Word64  where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Natural where toYAML = Scalar () . SInt . toInteger
+instance ToYAML Integer where toYAML = Scalar () . SInt
+
+
+instance ToYAML Text where
+  toYAML = Scalar () . SStr
+
+instance ToYAML a => ToYAML (Maybe a) where
+  toYAML Nothing = Scalar () SNull
+  toYAML (Just a) = toYAML a
+
+-- instance (ToYAML a, ToYAML b) => ToYAML (Either a b) where
+--     toYAML (Left a)  = toYAML a
+--     toYAML (Right b) = toYAML b
+
+instance ToYAML a => ToYAML [a] where
+  toYAML = Sequence () tagSeq . map toYAML
+
+instance (Ord k, ToYAML k, ToYAML v) => ToYAML (Map k v) where
+  toYAML kv = Mapping () tagMap (Map.fromList $ map (\(k,v) -> (toYAML k , toYAML v)) (Map.toList kv)) 
+
+instance (ToYAML a, ToYAML b) => ToYAML (a, b) where
+  toYAML (a,b) = toYAML [toYAML a, toYAML b]
+
+instance (ToYAML a, ToYAML b, ToYAML c) => ToYAML (a, b, c) where
+  toYAML (a,b,c) = toYAML [toYAML a, toYAML b, toYAML c]
+
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d) => ToYAML (a, b, c, d) where
+  toYAML (a,b,c,d) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d]
+  
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e) => ToYAML (a, b, c, d, e) where
+  toYAML (a,b,c,d,e) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e]
+  
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f) => ToYAML (a, b, c, d, e, f) where
+  toYAML (a,b,c,d,e,f) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f]
+  
+instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) => ToYAML (a, b, c, d, e, f, g) where
+  toYAML (a,b,c,d,e,f,g) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f, toYAML g]
+
+
+
+-- | Serialize YAML Node(s) using the YAML 1.2 Core schema as a lazy 'BS.L.ByteString'.
+--
+-- Each YAML Node produces exactly one YAML Document.
+--
+-- @since 0.2.0
+encode :: ToYAML v => [v] -> BS.L.ByteString 
+encode vList = encodeNode $ map (Doc . toYAML) vList
+
+-- | Convenience wrapper over 'encode' expecting exactly one YAML Node
+--
+-- @since 0.2.0
+encode1 :: ToYAML v => v -> BS.L.ByteString 
+encode1 a = encode [a]
+
+-- -- | Like 'encode' but outputs 'BS.ByteString'
+-- --
+-- -- @since 0.2.0
+-- encodeStrict :: ToYAML v => [v] -> BS.ByteString 
+-- encodeStrict = BS.L.toStrict . encode
+
+-- -- | Like 'encode1' but but outputs 'BS.ByteString'
+-- --
+-- -- @since 0.2.0
+-- encode1Strict :: ToYAML v => v -> BS.ByteString 
+-- encode1Strict = BS.L.toStrict . encode1

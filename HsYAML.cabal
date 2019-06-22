@@ -47,6 +47,8 @@ library
                      , Data.YAML.Event
                      , Data.YAML.Token
   other-modules:       Data.YAML.Loader
+                     , Data.YAML.Dumper
+                     , Data.YAML.Internal
                      , Data.YAML.Event.Internal
                      , Data.YAML.Event.Writer
                      , Data.YAML.Schema

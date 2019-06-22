@@ -90,6 +90,24 @@ main = do
           hPutStrLn stderr "unexpected arguments passed to yaml2yaml- sub-command"
           exitFailure
 
+    ("yaml2event-dump": args')
+      | null args' -> cmdDumpEvents
+      | otherwise  -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
+          exitFailure
+
+    ("yaml2yaml-dump": args')
+      | null args' -> cmdDumpYAML 
+      | otherwise  -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
+          exitFailure
+
+    ("yaml2node":args')
+      | null args' -> cmdPrintNode
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
+          exitFailure
+
     ("run-tml":args') -> cmdRunTml args'
 
     ("testml-compiler":args') -> cmdTestmlCompiler args'
@@ -107,6 +125,9 @@ main = do
       hPutStrLn stderr "  yaml2yaml           reads YAML stream from STDIN and dumps YAML to STDOUT (non-streaming version)"
       hPutStrLn stderr "  yaml2yaml-          reads YAML stream from STDIN and dumps YAML to STDOUT (streaming version)"
       hPutStrLn stderr "  yaml2yaml-validate  reads YAML stream from STDIN and dumps YAML to STDOUT and also outputs the no. of differences and differences after a round-trip"
+      hPutStrLn stderr "  yaml2node           reads YAML stream from STDIN and dumps YAML Nodes to STDOUT"
+      hPutStrLn stderr "  yaml2event-dump     reads YAML stream from STDIN and dumps events to STDOUT after a complete round-trip"
+      hPutStrLn stderr "  yaml2yaml-dump      reads YAML stream from STDIN and dumps YAML to STDOUT after a complete round-trip"
       hPutStrLn stderr "  run-tml             run/validate YAML-specific .tml file(s)"
       hPutStrLn stderr "  testml-compiler     emulate testml-compiler"
 
@@ -191,6 +212,45 @@ cmdYaml2YamlVal = do
           forM_ diffList $ \(old,new) -> do 
             hPutStrLn stdout $ "Input  > " ++ show old
             hPutStrLn stdout $ "Output < " ++ show new
+
+cmdPrintNode :: IO()
+cmdPrintNode = do
+  str <-  BS.L.getContents
+  case decode str :: Either String [Node Pos] of
+    Left s -> do
+      hPutStrLn stdout s
+      hFlush stdout
+    Right nodeSeq -> forM_ nodeSeq $ \node -> do
+      printNode node
+      putStrLn ""
+
+cmdDumpEvents :: IO()
+cmdDumpEvents = do
+  str <-  BS.L.getContents
+  case decode str :: Either String [Node Pos] of
+    Left str -> do
+      hPutStrLn stdout str
+      hFlush stdout
+    Right nodes ->
+      case sequence (dumpEvents (map toYAML nodes)) of
+        Left str -> do
+          hPutStrLn stdout str
+          hFlush stdout
+        Right events ->
+          forM_ events $ \ev -> do 
+            hPutStrLn stdout (ev2str True ev)
+            hFlush stdout
+
+cmdDumpYAML :: IO()
+cmdDumpYAML = do
+  str <-  BS.L.getContents
+  case decode str :: Either String [Node Pos] of
+    Left str -> do
+      hPutStrLn stdout str
+      hFlush stdout
+    Right nodes -> do
+      BS.L.hPutStrLn stdout $ encode nodes
+      hFlush stdout
 
 -- | 'J.Value' look-alike
 data Value' = Object'  (Map Text Value')
@@ -473,6 +533,26 @@ cmdTestmlCompiler _ = do
 
 putStrLn' :: String -> IO ()
 putStrLn' msg = putStrLn ("  " ++ msg)
+
+printNode :: Node loc -> IO ()
+printNode node = case node of  
+    (Y.Scalar _ a)      -> hPutStrLn stdout $  "Scalar "   ++ show a
+    (Y.Mapping _ a b)   -> do
+                              hPutStrLn stdout $  "Mapping "  ++ show a 
+                              printMap b
+    (Y.Sequence _ a b)  -> do 
+                              hPutStrLn stdout $  "Sequence " ++ show a 
+                              mapM_ printNode b
+    (Y.Anchor _ a b)    -> do
+                              hPutStr stdout $  "Anchor "   ++ show a ++ " "
+                              printNode b
+
+printMap :: Map (Node loc) (Node loc) -> IO ()
+printMap b = forM_ (Map.toList b) $ \(k,v) -> do 
+              hPutStr stdout "Key: "
+              printNode k 
+              hPutStr stdout "Value: "
+              printNode v
 
 ev2str :: Bool -> Event -> String
 ev2str withColSty = \case
