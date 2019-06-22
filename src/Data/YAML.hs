@@ -91,7 +91,7 @@ module Data.YAML
       -- * \"Concrete\" AST
     , decodeNode
     , decodeNode'
-    , Doc(..)
+    , Doc(Doc)
     , Node(..)
     , Scalar(..)
 
