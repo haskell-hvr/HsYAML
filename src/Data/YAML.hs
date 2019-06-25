@@ -62,8 +62,7 @@ module Data.YAML
 
     , ToYAML(..)
     , encodeNode
-    -- , encodeNode'
-    , dumpEvents -- TODO: Don't export this function
+    , encodeNode'
 
       -- * Typeclass-based resolving/decoding
     , decode

@@ -7,7 +7,7 @@
 -- Copyright: © Herbert Valerio Riedel 2015-2018
 -- SPDX-License-Identifier: GPL-2.0-or-later
 --
--- YAML 1.2 Schema resolvers
+-- YAML 1.2 Schema resolvers and encoders
 --
 module Data.YAML.Schema
     ( SchemaResolver(..)
@@ -15,6 +15,11 @@ module Data.YAML.Schema
     , jsonSchemaResolver
     , coreSchemaResolver
     , Scalar(..)
+
+    , SchemaEncoder(..)
+    , failsafeSchemaEncoder
+    , jsonSchemaEncoder
+    , coreSchemaEncoder
 
     , tagNull, tagBool, tagStr, tagInt, tagFloat, tagSeq, tagMap
     ) where
@@ -28,7 +33,7 @@ import           Numeric              (readHex, readOct)
 import           Text.Parsec          as P
 import           Text.Parsec.Text
 
-import           Data.YAML.Event      (Tag, isUntagged, mkTag, untagged)
+import           Data.YAML.Event      (Tag, isUntagged, mkTag, untagged,ScalarStyle(..))
 import qualified Data.YAML.Event      as YE
 
 import           Util
@@ -350,3 +355,98 @@ tagBool  = mkTag "tag:yaml.org,2002:bool"
 tagSeq   = mkTag "tag:yaml.org,2002:seq"
 tagMap   = mkTag "tag:yaml.org,2002:map"
 tagBang  = mkTag "!"
+
+
+-- @since 0.2.0
+data SchemaEncoder = SchemaEncoder
+    { schemaEncoderScalar   :: Scalar -> Either String YE.Event
+    , schemaEncoderSequence :: Tag -> Tag
+    , schemaEncoderMapping  :: Tag -> Tag
+    }
+
+mappingTag :: Tag -> Tag
+mappingTag t
+  | t == tagMap  = untagged
+  | otherwise    = t
+
+seqTag :: Tag -> Tag
+seqTag t
+  | t == tagSeq  = untagged
+  | otherwise    = t
+
+
+-- | \"Failsafe\" schema encoder inspired by
+-- in [YAML 1.2 / 10.1.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2803036)
+--
+-- @since 0.2.0
+failsafeSchemaEncoder :: SchemaEncoder
+failsafeSchemaEncoder = SchemaEncoder{..}
+  where
+
+    schemaEncoderScalar s = case s of
+      SNull        -> Left  "SNull scalar type not supported in failsafeSchemaEncoder"    
+      SBool  _     -> Left  "SBool scalar type not supported in failsafeSchemaEncoder"
+      SFloat _     -> Left  "SFloat scalar type not supported in failsafeSchemaEncoder"
+      SInt   _     -> Left  "SInt scalar type not supported in failsafeSchemaEncoder"
+      SStr   text  -> Right (YE.Scalar Nothing untagged DoubleQuoted text)
+      SUnknown t v -> Right (YE.Scalar Nothing t DoubleQuoted v)
+
+    schemaEncoderMapping  = mappingTag
+    schemaEncoderSequence = seqTag
+
+-- | Strict JSON schema encoder inspired by
+-- in [YAML 1.2 / 10.2.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2804356)
+--
+-- @since 0.2.0
+jsonSchemaEncoder :: SchemaEncoder
+jsonSchemaEncoder = SchemaEncoder{..}
+  where
+
+    schemaEncoderScalar s = case s of
+      SNull         -> Right (YE.Scalar Nothing tagNull  Plain "null") 
+      SBool  bool   -> Right (YE.Scalar Nothing tagBool Plain (encodeBool bool))
+      SFloat double -> Right (YE.Scalar Nothing tagFloat Plain (encodeDouble double))
+      SInt   int    -> Right (YE.Scalar Nothing tagInt Plain (T.pack . show $ int))   -- TODO : throw warning or error for values > Max Int
+      SStr   text   -> Right (YE.Scalar Nothing untagged DoubleQuoted text)
+      SUnknown _ _  -> Left  "SUnknown scalar type not supported in jsonSchemaEncoder"
+
+    schemaEncoderMapping  = mappingTag
+    schemaEncoderSequence = seqTag
+
+-- | Core schema encoder inspired by
+-- in [YAML 1.2 / 10.3.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2805071)
+--
+-- @since 0.2.0
+coreSchemaEncoder :: SchemaEncoder
+coreSchemaEncoder = SchemaEncoder{..}
+  where
+
+    schemaEncoderScalar s = case s of
+      SNull         -> Right (YE.Scalar Nothing tagNull  Plain "") 
+      SBool  bool   -> Right (YE.Scalar Nothing tagBool Plain (encodeBool bool))
+      SFloat double -> Right (YE.Scalar Nothing tagFloat Plain (encodeDouble double))
+      SInt   int    -> Right (YE.Scalar Nothing tagInt Plain (T.pack . show $ int))   -- TODO : throw warning or error for values > Max Int
+      SStr   text   -> Right (YE.Scalar Nothing untagged DoubleQuoted text)
+      SUnknown t v  -> Right (YE.Scalar Nothing t DoubleQuoted v)
+
+    schemaEncoderMapping  = mappingTag
+    schemaEncoderSequence = seqTag
+
+encodeBool :: Bool -> T.Text
+encodeBool b = if b then "true" else "false"
+
+encodeDouble :: Double -> T.Text
+encodeDouble d
+  | d /= d      = ".nan"
+  | d == (1/0)  = ".inf"
+  | d == (-1/0) = "-.inf"
+  | otherwise   = T.pack . show $ d
+
+-- encodeStr :: T.Text -> Either String YE.Event                             -- TODO : Preserve Format
+-- encodeStr t
+--   | T.null t          = Right (YE.Scalar Nothing tagStr Plain t)
+--   | hasLeadSpace t    = if T.last t == '\n' then Right (YE.Scalar Nothing tagStr (Literal Keep IndentOfs2) t) else Right (YE.Scalar Nothing tagStr (Literal Clip IndentOfs2) t)
+--   | T.last t == '\n'  = Right (YE.Scalar Nothing tagStr (Literal Keep IndentOfs2) t)
+--   | otherwise         = Right (YE.Scalar Nothing tagStr Plain t)
+--       where
+--         hasLeadSpace t' = T.isPrefixOf " " . T.dropWhile (== '\n') $ t'

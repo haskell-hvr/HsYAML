@@ -90,12 +90,6 @@ main = do
           hPutStrLn stderr "unexpected arguments passed to yaml2yaml- sub-command"
           exitFailure
 
-    ("yaml2event-dump": args')
-      | null args' -> cmdDumpEvents
-      | otherwise  -> do
-          hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
-          exitFailure
-
     ("yaml2yaml-dump": args')
       | null args' -> cmdDumpYAML 
       | otherwise  -> do
@@ -126,7 +120,6 @@ main = do
       hPutStrLn stderr "  yaml2yaml-          reads YAML stream from STDIN and dumps YAML to STDOUT (streaming version)"
       hPutStrLn stderr "  yaml2yaml-validate  reads YAML stream from STDIN and dumps YAML to STDOUT and also outputs the no. of differences and differences after a round-trip"
       hPutStrLn stderr "  yaml2node           reads YAML stream from STDIN and dumps YAML Nodes to STDOUT"
-      hPutStrLn stderr "  yaml2event-dump     reads YAML stream from STDIN and dumps events to STDOUT after a complete round-trip"
       hPutStrLn stderr "  yaml2yaml-dump      reads YAML stream from STDIN and dumps YAML to STDOUT after a complete round-trip"
       hPutStrLn stderr "  run-tml             run/validate YAML-specific .tml file(s)"
       hPutStrLn stderr "  testml-compiler     emulate testml-compiler"
@@ -223,23 +216,6 @@ cmdPrintNode = do
     Right nodeSeq -> forM_ nodeSeq $ \node -> do
       printNode node
       putStrLn ""
-
-cmdDumpEvents :: IO()
-cmdDumpEvents = do
-  str <-  BS.L.getContents
-  case decode str :: Either String [Node Pos] of
-    Left str -> do
-      hPutStrLn stdout str
-      hFlush stdout
-    Right nodes ->
-      case sequence (dumpEvents (map toYAML nodes)) of
-        Left str -> do
-          hPutStrLn stdout str
-          hFlush stdout
-        Right events ->
-          forM_ events $ \ev -> do 
-            hPutStrLn stdout (ev2str True ev)
-            hFlush stdout
 
 cmdDumpYAML :: IO()
 cmdDumpYAML = do
