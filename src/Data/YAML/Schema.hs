@@ -359,20 +359,20 @@ tagBang  = mkTag "!"
 
 -- @since 0.2.0
 data SchemaEncoder = SchemaEncoder
-    { schemaEncoderScalar   :: Scalar -> Either String YE.Event
-    , schemaEncoderSequence :: Tag -> Tag
-    , schemaEncoderMapping  :: Tag -> Tag
+    { schemaEncoderScalar   :: Scalar -> Either String (Tag, ScalarStyle, T.Text)
+    , schemaEncoderSequence :: Tag -> Either String Tag
+    , schemaEncoderMapping  :: Tag -> Either String Tag
     }
 
-mappingTag :: Tag -> Tag
+mappingTag :: Tag -> Either String Tag
 mappingTag t
-  | t == tagMap  = untagged
-  | otherwise    = t
+  | t == tagMap  = Right untagged
+  | otherwise    = Right t
 
-seqTag :: Tag -> Tag
+seqTag :: Tag -> Either String Tag
 seqTag t
-  | t == tagSeq  = untagged
-  | otherwise    = t
+  | t == tagSeq  = Right untagged
+  | otherwise    = Right t
 
 
 -- | \"Failsafe\" schema encoder inspired by
@@ -388,8 +388,8 @@ failsafeSchemaEncoder = SchemaEncoder{..}
       SBool  _     -> Left  "SBool scalar type not supported in failsafeSchemaEncoder"
       SFloat _     -> Left  "SFloat scalar type not supported in failsafeSchemaEncoder"
       SInt   _     -> Left  "SInt scalar type not supported in failsafeSchemaEncoder"
-      SStr   text  -> Right (YE.Scalar Nothing untagged DoubleQuoted text)
-      SUnknown t v -> Right (YE.Scalar Nothing t DoubleQuoted v)
+      SStr   text  -> Right (untagged, DoubleQuoted, text)
+      SUnknown t v -> Right (t, DoubleQuoted, v)
 
     schemaEncoderMapping  = mappingTag
     schemaEncoderSequence = seqTag
@@ -403,11 +403,11 @@ jsonSchemaEncoder = SchemaEncoder{..}
   where
 
     schemaEncoderScalar s = case s of
-      SNull         -> Right (YE.Scalar Nothing tagNull  Plain "null") 
-      SBool  bool   -> Right (YE.Scalar Nothing tagBool Plain (encodeBool bool))
-      SFloat double -> Right (YE.Scalar Nothing tagFloat Plain (encodeDouble double))
-      SInt   int    -> Right (YE.Scalar Nothing tagInt Plain (T.pack . show $ int))   -- TODO : throw warning or error for values > Max Int
-      SStr   text   -> Right (YE.Scalar Nothing untagged DoubleQuoted text)
+      SNull         -> Right (tagNull,  Plain, "null") 
+      SBool  bool   -> Right (tagBool, Plain, (encodeBool bool))
+      SFloat double -> Right (tagFloat, Plain, (encodeDouble double))
+      SInt   int    -> Right (tagInt, Plain, (T.pack . show $ int))
+      SStr   text   -> Right (untagged, DoubleQuoted, text)
       SUnknown _ _  -> Left  "SUnknown scalar type not supported in jsonSchemaEncoder"
 
     schemaEncoderMapping  = mappingTag
@@ -422,12 +422,12 @@ coreSchemaEncoder = SchemaEncoder{..}
   where
 
     schemaEncoderScalar s = case s of
-      SNull         -> Right (YE.Scalar Nothing tagNull  Plain "") 
-      SBool  bool   -> Right (YE.Scalar Nothing tagBool Plain (encodeBool bool))
-      SFloat double -> Right (YE.Scalar Nothing tagFloat Plain (encodeDouble double))
-      SInt   int    -> Right (YE.Scalar Nothing tagInt Plain (T.pack . show $ int))   -- TODO : throw warning or error for values > Max Int
-      SStr   text   -> Right (YE.Scalar Nothing untagged DoubleQuoted text)
-      SUnknown t v  -> Right (YE.Scalar Nothing t DoubleQuoted v)
+      SNull         -> Right (tagNull,  Plain, "") 
+      SBool  bool   -> Right (tagBool, Plain, (encodeBool bool))
+      SFloat double -> Right (tagFloat, Plain, (encodeDouble double))
+      SInt   int    -> Right (tagInt, Plain, (T.pack . show $ int))
+      SStr   text   -> Right (untagged, DoubleQuoted, text)
+      SUnknown t v  -> Right (t, DoubleQuoted, v)
 
     schemaEncoderMapping  = mappingTag
     schemaEncoderSequence = seqTag

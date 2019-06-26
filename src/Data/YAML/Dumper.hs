@@ -56,14 +56,13 @@ encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEve
         goNode _ [] _ = [Left "Dumper: unexpected pattern in goNode"]
         goNode lvl (node: rest) cont = case node of 
           YI.Scalar _ scalar -> goScalar scalar Nothing: isDocEnd lvl rest cont
-          Mapping   _ tag m  -> Right (MappingStart Nothing (schemaEncoderMapping tag) Block) : goMap (lvl + 1) m rest cont
-          Sequence  _ tag s  -> Right (SequenceStart Nothing (schemaEncoderSequence tag) Block) : goSeq (lvl + 1) s rest cont
+          Mapping   _ tag m  -> Right (MappingStart Nothing (getTag schemaEncoderMapping tag) Block) : goMap (lvl + 1) m rest cont
+          Sequence  _ tag s  -> Right (SequenceStart Nothing (getTag schemaEncoderSequence tag) Block) : goSeq (lvl + 1) s rest cont
           Anchor    _ nid n  -> goAnchor lvl nid n rest cont
 
         goScalar :: YS.Scalar -> Maybe Anchor -> Either String Event
         goScalar s anc = case schemaEncoderScalar s of 
-            Right (YE.Scalar _ t sty text) -> Right (YE.Scalar anc t sty text)
-            Right _ -> error "Impossible"
+            Right (t, sty, text) -> Right (YE.Scalar anc t sty text)
             Left err -> Left err
 
         goMap :: Int -> Mapping () -> [Node ()] -> Node2EvList -> EvList
@@ -82,8 +81,8 @@ encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEve
         goAnchor :: Int -> NodeId -> Node () -> [Node ()] -> Node2EvList -> EvList
         goAnchor lvl nid nod rest cont = case nod of 
           YI.Scalar _ scalar -> goScalar scalar (ancName nid): isDocEnd lvl rest cont
-          Mapping   _ tag m  -> Right (MappingStart (ancName nid) (schemaEncoderMapping tag) Block) : goMap (lvl + 1) m rest cont
-          Sequence  _ tag s  -> Right (SequenceStart (ancName nid) (schemaEncoderSequence tag) Block) : goSeq (lvl + 1) s rest cont
+          Mapping   _ tag m  -> Right (MappingStart (ancName nid) (getTag schemaEncoderMapping tag) Block) : goMap (lvl + 1) m rest cont
+          Sequence  _ tag s  -> Right (SequenceStart (ancName nid) (getTag schemaEncoderSequence tag) Block) : goSeq (lvl + 1) s rest cont
           Anchor    _ _ _    -> Left "Anchor has a anchor node" : (cont rest)
 
         isDocEnd :: Int -> [Node ()] -> Node2EvList -> EvList
@@ -92,5 +91,10 @@ encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEve
         ancName :: NodeId -> Maybe Anchor
         ancName (-1) = Nothing
         ancName nid  = Just $ T.pack ("a" ++ show nid)
+
+        getTag :: (Tag -> Either String Tag) -> Tag -> Tag
+        getTag f tag = case f tag of
+          Right t -> t
+          Left err -> error err
 
     

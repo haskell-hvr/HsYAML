@@ -59,10 +59,7 @@ module Data.YAML
     , encode1
     , encodeStrict
     , encode1Strict
-
     , ToYAML(..)
-    , encodeNode
-    , encodeNode'
 
       -- * Typeclass-based resolving/decoding
     , decode
@@ -90,6 +87,8 @@ module Data.YAML
       -- * \"Concrete\" AST
     , decodeNode
     , decodeNode'
+    , encodeNode
+    , encodeNode'
     , Doc(Doc)
     , Node(..)
     , Scalar(..)
@@ -99,6 +98,12 @@ module Data.YAML
     , failsafeSchemaResolver
     , jsonSchemaResolver
     , coreSchemaResolver
+
+      -- * YAML 1.2 Schema encoders
+    , SchemaEncoder(..)
+    , failsafeSchemaEncoder
+    , jsonSchemaEncoder
+    , coreSchemaEncoder
 
       -- * Generalised AST construction
     , decodeLoader
