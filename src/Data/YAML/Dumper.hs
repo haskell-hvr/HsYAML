@@ -36,10 +36,14 @@ encodeNode = encodeNode' coreSchemaEncoder UTF8
 --
 -- @since 0.2.0
 encodeNode' :: SchemaEncoder -> Encoding -> [Doc (Node ())] -> BS.L.ByteString
-encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ case sequence (dumpEvents (map getDoc nodes)) of   -- TODO
-    Left str -> error str
-    Right ev -> ev
+encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEvent (dumpEvents (map getDoc nodes))
   where
+
+    getEvent :: Either String Event -> Event
+    getEvent = \x -> case x of
+      Right ev -> ev
+      Left str -> error str
+    
     dumpEvents :: Node2EvList
     dumpEvents nodes' = Right StreamStart: go0 nodes'
       where
