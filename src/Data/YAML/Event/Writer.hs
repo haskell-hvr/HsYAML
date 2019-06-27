@@ -252,7 +252,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
 
       SingleQuoted    -> pfx $ T.B.singleton '\'' <> f (insFoldNls $ T.lines (T.replace "'" "''" t) ++ [ mempty | T.isSuffixOf "\n" t]) (T.B.singleton '\'' <> contEol) -- FIXME: leading white-space (i.e. SPC) before/after LF
 
-      DoubleQuoted    -> pfx $ T.B.singleton '"'  <> T.B.fromText (escapeDQ t) <> T.B.singleton '"'  <> contEol
+      DoubleQuoted    -> pfx $ T.B.singleton '"'  <> T.B.fromText (escapeDQ t) <> T.B.singleton '"'  <> contEol     -- FIXME: Fails For examples like "\\ "
 
       -- block style
       Folded chm iden -> pfx $ ">" <> goChomp chm <> goDigit iden <> g (insFoldNls' $ T.lines t) (fromEnum iden) cont

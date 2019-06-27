@@ -388,7 +388,7 @@ failsafeSchemaEncoder = SchemaEncoder{..}
       SBool  _     -> Left  "SBool scalar type not supported in failsafeSchemaEncoder"
       SFloat _     -> Left  "SFloat scalar type not supported in failsafeSchemaEncoder"
       SInt   _     -> Left  "SInt scalar type not supported in failsafeSchemaEncoder"
-      SStr   text  -> Right (untagged, DoubleQuoted, text)
+      SStr   text  -> failEncodeStr text
       SUnknown t v -> Right (t, DoubleQuoted, v)
 
     schemaEncoderMapping  = mappingTag
@@ -403,11 +403,11 @@ jsonSchemaEncoder = SchemaEncoder{..}
   where
 
     schemaEncoderScalar s = case s of
-      SNull         -> Right (tagNull,  Plain, "null") 
-      SBool  bool   -> Right (tagBool, Plain, (encodeBool bool))
-      SFloat double -> Right (tagFloat, Plain, (encodeDouble double))
-      SInt   int    -> Right (tagInt, Plain, (T.pack . show $ int))
-      SStr   text   -> Right (untagged, DoubleQuoted, text)
+      SNull         -> Right (untagged, Plain, "null") 
+      SBool  bool   -> Right (untagged, Plain, (encodeBool bool))
+      SFloat double -> Right (untagged, Plain, (encodeDouble double))
+      SInt   int    -> Right (untagged, Plain, (T.pack . show $ int))
+      SStr   text   -> jsonEncodeStr text
       SUnknown _ _  -> Left  "SUnknown scalar type not supported in jsonSchemaEncoder"
 
     schemaEncoderMapping  = mappingTag
@@ -422,11 +422,11 @@ coreSchemaEncoder = SchemaEncoder{..}
   where
 
     schemaEncoderScalar s = case s of
-      SNull         -> Right (tagNull,  Plain, "") 
-      SBool  bool   -> Right (tagBool, Plain, (encodeBool bool))
-      SFloat double -> Right (tagFloat, Plain, (encodeDouble double))
-      SInt   int    -> Right (tagInt, Plain, (T.pack . show $ int))
-      SStr   text   -> Right (untagged, DoubleQuoted, text)
+      SNull         -> Right (untagged, Plain, "null")
+      SBool  bool   -> Right (untagged, Plain, (encodeBool bool))
+      SFloat double -> Right (untagged, Plain, (encodeDouble double))
+      SInt   int    -> Right (untagged, Plain, (T.pack . show $ int))
+      SStr   text   -> coreEncodeStr text
       SUnknown t v  -> Right (t, DoubleQuoted, v)
 
     schemaEncoderMapping  = mappingTag
@@ -442,11 +442,37 @@ encodeDouble d
   | d == (-1/0) = "-.inf"
   | otherwise   = T.pack . show $ d
 
--- encodeStr :: T.Text -> Either String YE.Event                             -- TODO : Preserve Format
--- encodeStr t
---   | T.null t          = Right (YE.Scalar Nothing tagStr Plain t)
---   | hasLeadSpace t    = if T.last t == '\n' then Right (YE.Scalar Nothing tagStr (Literal Keep IndentOfs2) t) else Right (YE.Scalar Nothing tagStr (Literal Clip IndentOfs2) t)
---   | T.last t == '\n'  = Right (YE.Scalar Nothing tagStr (Literal Keep IndentOfs2) t)
---   | otherwise         = Right (YE.Scalar Nothing tagStr Plain t)
---       where
---         hasLeadSpace t' = T.isPrefixOf " " . T.dropWhile (== '\n') $ t'
+failEncodeStr :: T.Text -> Either String (Tag, ScalarStyle, T.Text)
+failEncodeStr t
+  | T.isPrefixOf " " t               = Right (untagged, DoubleQuoted, t)
+  | T.last t == ' '                  = Right (untagged, DoubleQuoted, t)
+  | T.any (not. isPlainChar) t       = Right (untagged, DoubleQuoted, t)
+  | otherwise                        = Right (untagged, Plain, t)
+
+jsonEncodeStr :: T.Text -> Either String (Tag, ScalarStyle, T.Text)
+jsonEncodeStr t
+  | T.null t                         = Right (untagged, DoubleQuoted, t)
+  | T.isPrefixOf " " t               = Right (untagged, DoubleQuoted, t)
+  | T.last t == ' '                  = Right (untagged, DoubleQuoted, t)
+  | T.any (not. isPlainChar) t       = Right (untagged, DoubleQuoted, t)
+  | isAmbiguous jsonSchemaResolver t = Right (untagged, DoubleQuoted, t)
+  | otherwise                        = Right (untagged, Plain, t)
+
+coreEncodeStr :: T.Text -> Either String (Tag, ScalarStyle, T.Text)
+coreEncodeStr t
+  | T.null t                         = Right (untagged, DoubleQuoted, t)
+  | T.isPrefixOf " " t               = Right (untagged, DoubleQuoted, t)
+  | T.last t == ' '                  = Right (untagged, DoubleQuoted, t)
+  | T.any (not. isPlainChar) t       = Right (untagged, DoubleQuoted, t)
+  | isAmbiguous coreSchemaResolver t = Right (untagged, DoubleQuoted, t)
+  | otherwise                        = Right (untagged, Plain, t)
+
+-- | <https://yaml.org/spec/1.2/spec.html#c-indicator Indicator Characters>
+isPlainChar :: Char -> Bool
+isPlainChar c = C.isAlphaNum c || c `elem` (" ~$^+=</;.\\" :: String)  -- not $ c `elem` "\n-?:,[]{}#&*!,>%@`\\'\""
+
+isAmbiguous :: SchemaResolver -> T.Text -> Bool
+isAmbiguous SchemaResolver{..} t = case schemaResolverScalar untagged Plain t of
+  Left err -> error err
+  Right (SStr _ ) -> False
+  Right _ -> True
