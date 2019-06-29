@@ -359,8 +359,8 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
     wsSol sol = if sol then mempty else ws
 
 escapeDQ :: Text -> Text
-escapeDQ t -- TODO: review "printable" definition in YAML 1.2 spec
-  | T.all (\c -> C.isPrint c && c /= '\n' && c /= '"') t = t
+escapeDQ t
+  | T.all (\c -> C.isPrint c && c /= '\\' && c /= '"') t = t
   | otherwise = T.concatMap escapeChar t
 
 escapeChar :: Char -> Text
