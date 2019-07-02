@@ -75,6 +75,9 @@ module Data.YAML
     , Mapping
     , (.:), (.:?), (.:!), (.!=)
 
+    , mapping
+    , (.=)
+
       -- ** Prism-style parsers
     , withSeq
     , withBool
@@ -609,3 +612,13 @@ class Loc loc where
 instance Loc Pos
 
 instance Loc () where toUnit = id
+
+type Pair = (Node (), Node ())
+
+-- @since 0.2.0
+(.=) :: ToYAML a => Text -> a -> Pair
+name .= node = (toYAML name, toYAML node)
+
+-- @since 0.2.0
+mapping :: [Pair] -> Node ()
+mapping = Mapping () tagMap . Map.fromList

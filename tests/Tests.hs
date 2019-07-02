@@ -1,10 +1,14 @@
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
 
-import Data.YAML as Y
+import           Control.Monad
+import           Control.Applicative
+import           Data.YAML                  as Y
 import qualified Data.Text                  as T
+import qualified Data.Map                   as Map
 import qualified Data.ByteString.Lazy.Char8 as BS.L
 import Test.Tasty (defaultMain, TestTree, testGroup)
-import Test.Tasty.QuickCheck (testProperty)
+import Test.Tasty.QuickCheck (testProperty,Arbitrary(..))
 
 outputStr :: ToYAML a => a -> BS.L.ByteString
 outputStr a = BS.L.init (encode1 a)  -- TODO: remove trailing newline from Writer.hs
@@ -24,13 +28,6 @@ encodeDouble num denom
     | d == (-1/0) = "-.inf" == outputStr d
     | otherwise    = BS.L.pack (show d) == outputStr d
   where d = num / denom
-
-roundTripStr :: String -> Bool
-roundTripStr v = do
-  let text = T.pack v
-  case decode1 (encode1 text) of
-    Left _  -> False
-    Right ans -> text == ans
 
 roundTrip :: (Eq a, FromYAML a, ToYAML a) => (a -> a -> Bool) -> a -> a -> Bool
 roundTrip eq _ v =
@@ -59,10 +56,43 @@ tests =
     , testProperty "encodeDouble" encodeDouble
     ]
   , testGroup "roundTrip" 
-    [ testProperty "Bool" $ roundTripEq True
-    , testProperty "Double" $ roundTrip approxEq (1::Double)
-    , testProperty "Int" $ roundTripEq (1::Int)
+    [ testProperty "Bool"    $ roundTripEq True
+    , testProperty "Double"  $ roundTrip approxEq (1::Double)
+    , testProperty "Int"     $ roundTripEq (1::Int)
     , testProperty "Integer" $ roundTripEq (1::Integer)
-    , testProperty "String" $ roundTripStr -- Writer fails for examples like "\\ "
+    , testProperty "Text"    $ roundTripEq T.empty
+    , testProperty "Seq"     $ roundTripEq ([""]:: [T.Text])
+    , testProperty "Map"     $ roundTripEq (undefined :: Map.Map T.Text T.Text)
+    , testProperty "Foo"     $ roundTripEq (undefined :: Foo)
     ]
   ]
+
+instance Arbitrary T.Text where
+  arbitrary = T.pack <$> arbitrary
+
+data Foo = Foo 
+  { fooBool :: Bool
+  , fooInt :: Int
+  , fooTuple :: (T.Text, Int)
+  , fooSeq :: [T.Text]
+  , fooMap :: Map.Map T.Text T.Text
+  } deriving (Show,Eq)
+
+instance ToYAML Foo where
+  toYAML Foo{..} = mapping [ "fooBool"  .= fooBool
+                           , "fooInt"   .= fooInt
+                           , "fooTuple" .= fooTuple
+                           , "fooSeq"   .= fooSeq
+                           , "fooMap"   .= fooMap
+                           ]
+
+instance FromYAML Foo where
+  parseYAML = withMap "Foo" $ \m -> Foo
+      <$> m .: "fooBool"
+      <*> m .: "fooInt"
+      <*> m .: "fooTuple"
+      <*> m .: "fooSeq"
+      <*> m .: "fooMap"
+
+instance Arbitrary Foo where
+  arbitrary = liftM5 Foo arbitrary arbitrary arbitrary arbitrary arbitrary

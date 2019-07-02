@@ -66,16 +66,19 @@ encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEve
             Left err -> Left err
 
         goMap :: Int -> Mapping () -> [Node ()] -> Node2EvList -> EvList
-        goMap lvl m rest cont = goNode lvl (mapToList m) g
+        goMap lvl m rest cont = case (mapToList m) of
+          []   -> Right MappingEnd : isDocEnd (lvl - 1) rest cont
+          list -> goNode lvl list g
           where 
-            g []    = (Right MappingEnd) : isDocEnd (lvl - 1) rest cont
+            g []    = Right MappingEnd : isDocEnd (lvl - 1) rest cont
             g rest' = goNode lvl rest' g 
             mapToList = Map.foldrWithKey (\k v a -> k : v : a) []
 
         goSeq :: Int -> [Node ()] -> [Node ()] -> Node2EvList -> EvList
+        goSeq lvl []  rest cont = Right SequenceEnd : isDocEnd (lvl - 1) rest cont
         goSeq lvl nod rest cont = goNode lvl nod g
           where 
-            g []    = (Right SequenceEnd) : isDocEnd (lvl - 1) rest cont
+            g []    = Right SequenceEnd : isDocEnd (lvl - 1) rest cont
             g rest' = goNode lvl rest' g 
 
         goAnchor :: Int -> NodeId -> Node () -> [Node ()] -> Node2EvList -> EvList
