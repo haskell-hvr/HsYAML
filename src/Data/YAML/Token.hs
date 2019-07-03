@@ -7,8 +7,6 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
-{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-} -- FIXME
-
 -- |
 -- Copyright: © Oren Ben-Kiki 2007,
 --            © Herbert Valerio Riedel 2015-2018
@@ -492,17 +490,17 @@ infix  0 >!
 -- | @parser % n@ repeats /parser/ exactly /n/ times.
 (%) :: (Match match result) => match -> Int -> Pattern
 parser % n
-  | n <= 0 = empty
-  | n >  0 = parser' *> (parser' % n .- 1)
+  | n <= 0    = empty
+  | otherwise = parser' *> (parser' % n .- 1)
   where
     parser' = match parser
 
 -- | @parser <% n@ matches fewer than /n/ occurrences of /parser/.
 (<%) :: (Match match result) => match -> Int -> Pattern
-parser <% n
-  | n < 1 = pfail "Fewer than 0 repetitions"
-  | n == 1 = reject parser Nothing
-  | n > 1  = DeLess ^ ( ((parser ! DeLess) *> (parser <% n .- 1)) <|> empty )
+parser <% n = case n `compare` 1 of
+  LT -> pfail "Fewer than 0 repetitions"
+  EQ -> reject parser Nothing
+  GT -> DeLess ^ ( ((parser ! DeLess) *> (parser <% n .- 1)) <|> empty )
 
 data Decision = DeNone -- ""
               | DeStar -- "*"
@@ -774,6 +772,7 @@ nextIf test = Parser $ \ state ->
                         in case reply^.rResult of
                                 Failed _ -> reply
                                 Result _ -> limitedNextIf state
+                                More _   -> error "unexpected Result More _ pattern"
   where
     limitedNextIf state =
         case state^.sLimit of
@@ -1229,6 +1228,7 @@ s_line_prefix n c {- 67 -} = case c of
                                   BlockIn  -> s_block_line_prefix n
                                   FlowOut  -> s_flow_line_prefix n
                                   FlowIn   -> s_flow_line_prefix n
+                                  _        -> error "unexpected node style pattern in s_line_prefix"
 
 s_block_line_prefix n {- 68 -} = s_indent n
 s_flow_line_prefix  n {- 69 -} = s_indent n & ( s_separate_in_line ?)
@@ -1379,6 +1379,8 @@ nb_double_text n c  {- 110 -} = case c of
                                      FlowIn   -> nb_double_multi_line n
                                      BlockKey -> nb_double_one_line
                                      FlowKey  -> nb_double_one_line
+                                     _        -> error "unexpected node style pattern in nb_double_text"
+
 nb_double_one_line  {- 111 -} = ( nb_double_char *)
 
 s_double_escaped n {- 112 -} = ( s_white *)
@@ -1408,6 +1410,8 @@ nb_single_text n c {- 121 -} = case c of
                                     FlowIn   -> nb_single_multi_line n
                                     BlockKey -> nb_single_one_line
                                     FlowKey  -> nb_single_one_line
+                                    _        -> error "unexpected node style pattern in nb_single_text"
+
 nb_single_one_line {- 122 -} = ( nb_single_char *)
 
 nb_ns_single_in_line    {- 123 -} = ( ( s_white *) & ns_single_char *)
@@ -1427,6 +1431,7 @@ ns_plain_safe c   {- 127 -} = case c of
                                    FlowIn   -> ns_plain_safe_in
                                    BlockKey -> ns_plain_safe_out
                                    FlowKey  -> ns_plain_safe_in
+                                   _        -> error "unexpected node style pattern in ns_plain_safe"
                                    
 ns_plain_safe_out {- 128 -} = ns_char
 ns_plain_safe_in  {- 129 -} = ns_char - c_flow_indicator
@@ -1439,7 +1444,9 @@ ns_plain n c          {- 131 -} = wrapTokens BeginScalar EndScalar
                                              FlowOut  -> ns_plain_multi_line n c
                                              FlowIn   -> ns_plain_multi_line n c
                                              BlockKey -> ns_plain_one_line c
-                                             FlowKey  -> ns_plain_one_line c)
+                                             FlowKey  -> ns_plain_one_line c
+                                             _        -> error "unexpected node style pattern in ns_plain")
+
 nb_ns_plain_in_line c {- 132 -} = ( ( s_white *) & ns_plain_char c *)
 ns_plain_one_line c   {- 133 -} = ns_plain_first c ! DeNode & nb_ns_plain_in_line c
 
@@ -1455,6 +1462,7 @@ in_flow c {- 136 -} = case c of
                            FlowIn   -> FlowIn
                            BlockKey -> FlowKey
                            FlowKey  -> FlowKey
+                           _        -> error "unexpected node style pattern in in_flow"
 
 -- 7.4.1 Flow Sequences
 
@@ -1726,6 +1734,7 @@ s_l__block_collection n c {- 200 -} = ( s_separate (n .+ 1) c & c_ns_properties 
 seq_spaces n c            {- 201 -} = case c of
                                            BlockOut -> n .- 1
                                            BlockIn  -> n
+                                           _        -> error "unexpected node style pattern in seq_spaces"
 
 -- 9.1.1 Document Prefix
 
