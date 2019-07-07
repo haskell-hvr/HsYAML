@@ -357,7 +357,7 @@ tagMap   = mkTag "tag:yaml.org,2002:map"
 tagBang  = mkTag "!"
 
 
--- @since 0.2.0
+-- | @since 0.2.0
 data SchemaEncoder = SchemaEncoder
     { schemaEncoderScalar   :: Scalar -> Either String (Tag, ScalarStyle, T.Text)
     , schemaEncoderSequence :: Tag -> Either String Tag
@@ -375,7 +375,7 @@ seqTag t
   | otherwise    = Right t
 
 
--- | \"Failsafe\" schema encoder inspired by
+-- | \"Failsafe\" schema encoder as specified
 -- in [YAML 1.2 / 10.1.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2803036)
 --
 -- @since 0.2.0

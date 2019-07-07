@@ -615,10 +615,10 @@ instance Loc () where toUnit = id
 
 type Pair = (Node (), Node ())
 
--- @since 0.2.0
+-- | @since 0.2.0
 (.=) :: ToYAML a => Text -> a -> Pair
 name .= node = (toYAML name, toYAML node)
 
--- @since 0.2.0
+-- | @since 0.2.0
 mapping :: [Pair] -> Node ()
 mapping = Mapping () tagMap . Map.fromList
