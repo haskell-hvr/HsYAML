@@ -7,7 +7,7 @@
 -- Copyright: © Herbert Valerio Riedel 2015-2018
 -- SPDX-License-Identifier: GPL-2.0-or-later
 --
--- YAML 1.2 Schema resolvers
+-- YAML 1.2 Schema resolvers and encoders
 --
 module Data.YAML.Schema
     ( SchemaResolver(..)
@@ -15,6 +15,11 @@ module Data.YAML.Schema
     , jsonSchemaResolver
     , coreSchemaResolver
     , Scalar(..)
+
+    , SchemaEncoder(..)
+    , failsafeSchemaEncoder
+    , jsonSchemaEncoder
+    , coreSchemaEncoder
 
     , tagNull, tagBool, tagStr, tagInt, tagFloat, tagSeq, tagMap
     ) where
@@ -28,7 +33,7 @@ import           Numeric              (readHex, readOct)
 import           Text.Parsec          as P
 import           Text.Parsec.Text
 
-import           Data.YAML.Event      (Tag, isUntagged, mkTag, untagged)
+import           Data.YAML.Event      (Tag, isUntagged, mkTag, untagged,ScalarStyle(..))
 import qualified Data.YAML.Event      as YE
 
 import           Util
@@ -350,3 +355,124 @@ tagBool  = mkTag "tag:yaml.org,2002:bool"
 tagSeq   = mkTag "tag:yaml.org,2002:seq"
 tagMap   = mkTag "tag:yaml.org,2002:map"
 tagBang  = mkTag "!"
+
+
+-- | @since 0.2.0
+data SchemaEncoder = SchemaEncoder
+    { schemaEncoderScalar   :: Scalar -> Either String (Tag, ScalarStyle, T.Text)
+    , schemaEncoderSequence :: Tag -> Either String Tag
+    , schemaEncoderMapping  :: Tag -> Either String Tag
+    }
+
+mappingTag :: Tag -> Either String Tag
+mappingTag t
+  | t == tagMap  = Right untagged
+  | otherwise    = Right t
+
+seqTag :: Tag -> Either String Tag
+seqTag t
+  | t == tagSeq  = Right untagged
+  | otherwise    = Right t
+
+
+-- | \"Failsafe\" schema encoder as specified
+-- in [YAML 1.2 / 10.1.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2803036)
+--
+-- @since 0.2.0
+failsafeSchemaEncoder :: SchemaEncoder
+failsafeSchemaEncoder = SchemaEncoder{..}
+  where
+
+    schemaEncoderScalar s = case s of
+      SNull        -> Left  "SNull scalar type not supported in failsafeSchemaEncoder"    
+      SBool  _     -> Left  "SBool scalar type not supported in failsafeSchemaEncoder"
+      SFloat _     -> Left  "SFloat scalar type not supported in failsafeSchemaEncoder"
+      SInt   _     -> Left  "SInt scalar type not supported in failsafeSchemaEncoder"
+      SStr   text  -> failEncodeStr text
+      SUnknown t v -> Right (t, DoubleQuoted, v)
+
+    schemaEncoderMapping  = mappingTag
+    schemaEncoderSequence = seqTag
+
+-- | Strict JSON schema encoder inspired by
+-- in [YAML 1.2 / 10.2.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2804356)
+--
+-- @since 0.2.0
+jsonSchemaEncoder :: SchemaEncoder
+jsonSchemaEncoder = SchemaEncoder{..}
+  where
+
+    schemaEncoderScalar s = case s of
+      SNull         -> Right (untagged, Plain, "null") 
+      SBool  bool   -> Right (untagged, Plain, (encodeBool bool))
+      SFloat double -> Right (untagged, Plain, (encodeDouble double))
+      SInt   int    -> Right (untagged, Plain, (T.pack . show $ int))
+      SStr   text   -> jsonEncodeStr text
+      SUnknown _ _  -> Left  "SUnknown scalar type not supported in jsonSchemaEncoder"
+
+    schemaEncoderMapping  = mappingTag
+    schemaEncoderSequence = seqTag
+
+-- | Core schema encoder inspired by
+-- in [YAML 1.2 / 10.3.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2805071)
+--
+-- @since 0.2.0
+coreSchemaEncoder :: SchemaEncoder
+coreSchemaEncoder = SchemaEncoder{..}
+  where
+
+    schemaEncoderScalar s = case s of
+      SNull         -> Right (untagged, Plain, "null")
+      SBool  bool   -> Right (untagged, Plain, (encodeBool bool))
+      SFloat double -> Right (untagged, Plain, (encodeDouble double))
+      SInt   int    -> Right (untagged, Plain, (T.pack . show $ int))
+      SStr   text   -> coreEncodeStr text
+      SUnknown t v  -> Right (t, DoubleQuoted, v)
+
+    schemaEncoderMapping  = mappingTag
+    schemaEncoderSequence = seqTag
+
+encodeBool :: Bool -> T.Text
+encodeBool b = if b then "true" else "false"
+
+encodeDouble :: Double -> T.Text
+encodeDouble d
+  | d /= d      = ".nan"
+  | d == (1/0)  = ".inf"
+  | d == (-1/0) = "-.inf"
+  | otherwise   = T.pack . show $ d
+
+failEncodeStr :: T.Text -> Either String (Tag, ScalarStyle, T.Text)
+failEncodeStr t
+  | T.isPrefixOf " " t               = Right (untagged, DoubleQuoted, t)
+  | T.last t == ' '                  = Right (untagged, DoubleQuoted, t)
+  | T.any (not. isPlainChar) t       = Right (untagged, DoubleQuoted, t)
+  | otherwise                        = Right (untagged, Plain, t)
+
+jsonEncodeStr :: T.Text -> Either String (Tag, ScalarStyle, T.Text)
+jsonEncodeStr t
+  | T.null t                         = Right (untagged, DoubleQuoted, t)
+  | T.isPrefixOf " " t               = Right (untagged, DoubleQuoted, t)
+  | T.last t == ' '                  = Right (untagged, DoubleQuoted, t)
+  | T.any (not. isPlainChar) t       = Right (untagged, DoubleQuoted, t)
+  | isAmbiguous jsonSchemaResolver t = Right (untagged, DoubleQuoted, t)
+  | otherwise                        = Right (untagged, Plain, t)
+
+coreEncodeStr :: T.Text -> Either String (Tag, ScalarStyle, T.Text)
+coreEncodeStr t
+  | T.null t                         = Right (untagged, DoubleQuoted, t)
+  | T.isPrefixOf " " t               = Right (untagged, DoubleQuoted, t)
+  | T.last t == ' '                  = Right (untagged, DoubleQuoted, t)
+  | T.any (not. isPlainChar) t       = Right (untagged, DoubleQuoted, t)
+  | isAmbiguous coreSchemaResolver t = Right (untagged, DoubleQuoted, t)
+  | otherwise                        = Right (untagged, Plain, t)
+
+-- | <https://yaml.org/spec/1.2/spec.html#c-indicator Indicator Characters>
+isPlainChar :: Char -> Bool
+isPlainChar c = C.isAlphaNum c || c `elem` (" ~$^+=</;.\\" :: String)  -- not $ c `elem` "\n-?:,[]{}#&*!,>%@`\\'\""
+
+isAmbiguous :: SchemaResolver -> T.Text -> Bool
+isAmbiguous SchemaResolver{..} t = case schemaResolverScalar untagged Plain t of
+  Left err -> error err
+  Right (SStr _ ) -> False
+  Right _ -> True

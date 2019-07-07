@@ -59,11 +59,7 @@ module Data.YAML
     , encode1
     , encodeStrict
     , encode1Strict
-
     , ToYAML(..)
-    , encodeNode
-    -- , encodeNode'
-    , dumpEvents -- TODO: Don't export this function
 
       -- * Typeclass-based resolving/decoding
     , decode
@@ -79,6 +75,9 @@ module Data.YAML
     , Mapping
     , (.:), (.:?), (.:!), (.!=)
 
+    , mapping
+    , (.=)
+
       -- ** Prism-style parsers
     , withSeq
     , withBool
@@ -91,6 +90,8 @@ module Data.YAML
       -- * \"Concrete\" AST
     , decodeNode
     , decodeNode'
+    , encodeNode
+    , encodeNode'
     , Doc(Doc)
     , Node(..)
     , Scalar(..)
@@ -100,6 +101,12 @@ module Data.YAML
     , failsafeSchemaResolver
     , jsonSchemaResolver
     , coreSchemaResolver
+
+      -- * YAML 1.2 Schema encoders
+    , SchemaEncoder(..)
+    , failsafeSchemaEncoder
+    , jsonSchemaEncoder
+    , coreSchemaEncoder
 
       -- * Generalised AST construction
     , decodeLoader
@@ -605,3 +612,13 @@ class Loc loc where
 instance Loc Pos
 
 instance Loc () where toUnit = id
+
+type Pair = (Node (), Node ())
+
+-- | @since 0.2.0
+(.=) :: ToYAML a => Text -> a -> Pair
+name .= node = (toYAML name, toYAML node)
+
+-- | @since 0.2.0
+mapping :: [Pair] -> Node ()
+mapping = Mapping () tagMap . Map.fromList
