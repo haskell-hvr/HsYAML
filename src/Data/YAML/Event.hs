@@ -114,7 +114,7 @@ getUriTag toks0 = do
 -- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
 -- (which will be auto-detected).
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ stripComments $ filter (not . isWhite) $ Y.tokenize bs0 False)
+parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ filter (not . isWhite) $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -133,6 +133,7 @@ parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ 
 
     go0 :: Tok2EvStream
     go0 []                                                = [Right (initEvPos StreamEnd)]
+    go0 toks0@(Y.Token { Y.tCode = Y.BeginComment} : _)   = goComment toks0 go0
     go0 toks0@(Y.Token { Y.tCode = Y.BeginDocument } : _) = go1 dinfo0 toks0
     go0 (Y.Token { Y.tCode = Y.DocumentEnd } : rest)      = go0 rest -- stray/redundant document-end markers cause this
     go0 xs                                                = err xs
@@ -142,12 +143,14 @@ parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ 
     go1 m (Y.Token { Y.tCode = Y.BeginDocument } : rest) = goDirs m rest
     go1 _ (tok@Y.Token { Y.tCode = Y.EndDocument } : Y.Token { Y.tCode = Y.DocumentEnd } : rest) = ( Right (getEvPos (DocumentEnd True) tok )): go0 rest
     go1 _ (tok@Y.Token { Y.tCode = Y.EndDocument } : rest) = ( Right (getEvPos (DocumentEnd False) tok )) : go0 rest
+    go1 m toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) = goComment toks0 (go1 m)
     go1 m (Y.Token { Y.tCode = Y.BeginNode } : rest) = goNode0 m rest (go1 m)
     go1 _ xs = err xs
 
     -- consume {Begin,End}Directives and emit DocumentStart event
     goDirs :: DInfo -> Tok2EvStream
     goDirs m (Y.Token { Y.tCode = Y.BeginDirective } : rest) = goDir1 m rest
+    goDirs m toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) = goComment toks0 (goDirs m)
     goDirs m (tok@Y.Token { Y.tCode = Y.DirectivesEnd } : rest)
       | Just (1,mi) <- diVer m = Right (getEvPos (DocumentStart (DirEndMarkerVersion mi)) tok) : go1 m rest
       | otherwise              = Right (getEvPos (DocumentStart DirEndMarkerNoVersion) tok) : go1 m rest
@@ -212,6 +215,7 @@ goNode0 DInfo {..} = goNode
     mapInd _   = error "mapInd: internal error" -- impossible
 
     goNode :: Tok2EvStreamCont
+    goNode toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goNode cont)
     goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar (mempty,untagged) rest (flip goNodeEnd cont)
     goNode (tok@Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (SequenceStart Nothing untagged (seqInd ind)) tok): goSeq rest (flip goNodeEnd cont)
     goNode (tok@Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (MappingStart Nothing untagged (mapInd ind)) tok) : goMap rest (flip goNodeEnd cont)
@@ -226,6 +230,7 @@ goNode0 DInfo {..} = goNode
     goNode xs _cont = err xs
 
     goNode' :: Props -> Tok2EvStreamCont
+    goNode' props toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont  = goComment toks0 (flip (goNode' props) cont)
     goNode' props (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont   = goScalar props rest (flip goNodeEnd cont)
     goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (SequenceStart manchor mtag (seqInd ind)) tok) : goSeq rest (flip goNodeEnd cont)
     goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (MappingStart manchor mtag (mapInd ind)) tok) : goMap rest (flip goNodeEnd cont)
@@ -233,6 +238,7 @@ goNode0 DInfo {..} = goNode
     goNode' _ xs                                            _cont = err xs
 
     goNodeEnd :: Tok2EvStreamCont
+    goNodeEnd toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goNodeEnd cont)
     goNodeEnd (Y.Token { Y.tCode = Y.EndNode } : rest) cont = cont rest
     goNodeEnd xs                                      _cont = err xs
 
@@ -308,6 +314,7 @@ goNode0 DInfo {..} = goNode
           | "-"  <- ind = go0 ii (chn sty Strip) rest
           | [c]  <- ind, '1' <= c, c <= '9' = go0 False (chn' sty (C.digitToInt c)) rest
 
+        go0 ii sty tok@(Y.Token { Y.tCode = Y.BeginComment} : _)           = goComment tok (go0 ii sty)
         go0 ii sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest)      = go' ii t sty rest
         go0 ii sty (Y.Token { Y.tCode = Y.LineFold } : rest)               = go' ii " " sty rest
         go0 ii sty (Y.Token { Y.tCode = Y.LineFeed } : rest)               = go' ii "\n" sty rest
@@ -386,6 +393,7 @@ goNode0 DInfo {..} = goNode
 
     goSeq :: Tok2EvStreamCont
     goSeq (tok@Y.Token { Y.tCode = Y.EndSequence } : rest) cont = Right (getEvPos SequenceEnd  tok): cont rest
+    goSeq toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goSeq cont)
     goSeq (Y.Token { Y.tCode = Y.BeginNode } : rest) cont = goNode rest (flip goSeq cont)
     goSeq (tok@Y.Token { Y.tCode = Y.BeginMapping } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } :  rest) cont = Right (getEvPos (MappingStart Nothing untagged (mapInd ind)) tok) : goMap rest (flip goSeq cont)
     goSeq (tok@Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (getEvPos (MappingStart Nothing untagged Block) tok) : goMap rest (flip goSeq cont)
@@ -395,30 +403,44 @@ goNode0 DInfo {..} = goNode
 
     goMap :: Tok2EvStreamCont
     goMap (tok@Y.Token { Y.tCode = Y.EndMapping } : rest) cont = Right (getEvPos MappingEnd tok) : cont rest
+    goMap toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goMap cont)
     goMap (Y.Token { Y.tCode = Y.BeginPair } : rest) cont = goPair1 rest (flip goMap cont)
     goMap (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goMap rest cont
     goMap xs _cont = err xs
 
     goPair1 (Y.Token { Y.tCode = Y.BeginNode } : rest) cont = goNode rest (flip goPair2 cont)
+    goPair1 toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goPair1 cont)
     goPair1 (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goPair1 rest cont
     goPair1 xs _cont = err xs
 
+    goPair2 toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goPair2 cont)
     goPair2 (Y.Token { Y.tCode = Y.BeginNode } : rest) cont = goNode rest (flip goPairEnd cont)
     goPair2 (Y.Token { Y.tCode = Y.Indicator } : rest) cont = goPair2 rest cont
     goPair2 xs _cont                                        = err xs
 
+    goPairEnd toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goPairEnd cont)
     goPairEnd (Y.Token { Y.tCode = Y.EndPair } : rest) cont = cont rest
     goPairEnd xs _cont                                      = err xs
 
 
-stripComments :: [Y.Token] -> [Y.Token]
-stripComments (Y.Token { Y.tCode = Y.BeginComment } : rest) = skip rest
-  where
-    skip (Y.Token { Y.tCode = Y.EndComment } : rest') = stripComments rest'
-    skip (_                                  : rest') = skip rest'
-    skip [] = error "the impossible happened"
-stripComments (t : rest) = t : stripComments rest
-stripComments [] = []
+goComment :: Tok2EvStreamCont
+goComment (tok@Y.Token { Y.tCode = Y.BeginComment} :
+          Y.Token { Y.tCode = Y.Indicator, Y.tText = "#" } :
+          Y.Token { Y.tCode = Y.Meta, Y.tText = comment } :
+          Y.Token { Y.tCode = Y.EndComment } : rest) cont   = (Right (getEvPos (Comment (T.pack comment)) tok)) : cont rest
+goComment (tok@Y.Token { Y.tCode = Y.BeginComment} :
+          Y.Token { Y.tCode = Y.Indicator, Y.tText = "#" } :
+          Y.Token { Y.tCode = Y.EndComment } : rest) cont   = (Right (getEvPos (Comment T.empty) tok)) : cont rest
+goComment xs _cont = err xs
+
+-- stripComments :: [Y.Token] -> [Y.Token]
+-- stripComments (Y.Token { Y.tCode = Y.BeginComment } : rest) = skip rest
+--   where
+--     skip (Y.Token { Y.tCode = Y.EndComment } : rest') = stripComments rest'
+--     skip (_                                  : rest') = skip rest'
+--     skip [] = error "the impossible happened"
+-- stripComments (t : rest) = t : stripComments rest
+-- stripComments [] = []
 
 type Tok2EvStream = [Y.Token] -> EvStream
 

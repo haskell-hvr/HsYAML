@@ -50,6 +50,7 @@ data Event
     | StreamEnd
     | DocumentStart  !Directives
     | DocumentEnd    !Bool
+    | Comment        !Text
     | Alias          !Anchor
     | Scalar         !(Maybe Anchor)  !Tag  !ScalarStyle  !Text
     | SequenceStart  !(Maybe Anchor)  !Tag  !NodeStyle

@@ -72,6 +72,7 @@ writeEventsText (StreamStart:xs) = T.B.toLazyText $ goStream xs (error "writeEve
     -- goStream :: [Event] -> [Event] -> T.B.Builder
     goStream [StreamEnd] _ = mempty
     goStream (StreamEnd : _ : _ ) _cont = error "writeEvents: events after StreamEnd"
+    goStream (Comment com: rest) cont = goComment (0 :: Int) True BlockIn com (goStream rest cont)
     goStream (DocumentStart marker : rest) cont
       = case marker of
           NoDirEndMarker         -> putNode False rest (\zs -> goDoc zs cont)
@@ -82,6 +83,7 @@ writeEventsText (StreamStart:xs) = T.B.toLazyText $ goStream xs (error "writeEve
 
     goDoc (DocumentEnd marker : rest) cont
       = (if marker then "...\n" else mempty) <> goStream rest cont
+    goDoc (Comment com: rest) cont = goComment (0 :: Int) True BlockIn com (goDoc rest cont)
     goDoc ys _ = error (show ys)
 
     -- unexpected s l = error ("writeEvents: unexpected " ++ show l ++ " " ++ show s)
@@ -96,6 +98,28 @@ data Context = BlockOut     -- ^ Outside block sequence.
              | FlowIn       -- ^ Inside flow collection.
              | FlowKey      -- ^ Implicit flow key.
              deriving (Eq,Show)
+
+goComment :: Int -> Bool -> Context -> T.Text -> T.B.Builder -> T.B.Builder
+goComment !n !sol c comment cont = doSol <> "#" <> (T.B.fromText comment) <> doEol <> doIndent <> cont
+  where
+    doEol
+      | not sol && n == 0 =  mempty           -- "--- " case
+      | not sol && FlowOut == c = mempty 
+      | otherwise = eol
+
+    doSol 
+      | not sol && (BlockOut == c || FlowOut == c) = ws
+      | sol = mempty <> mkInd n'
+      | FlowIn == c || FlowOut == c = eol <> mkInd n' <> ws 
+      | otherwise = eol <> mkInd n'
+
+    n' 
+      | BlockOut <- c = max 0 (n - 1)
+      | otherwise     = n
+
+    doIndent
+      | BlockOut <- c = mkInd n'
+      | otherwise = mempty
 
 putNode :: Bool -> [Event] -> ([Event] -> T.B.Builder) -> T.B.Builder
 putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
@@ -126,7 +150,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         SequenceStart anc tag sty    -> goSeq (n+1) sol (chn sty) anc tag sty rest cont
         MappingStart  anc tag sty    -> goMap (n+1) sol (chn sty) anc tag sty rest cont
         Alias a                      -> pfx <> goAlias c a (cont rest)
-
+        Comment com                  -> goComment (n+1) sol c com (go n sol c rest cont)
         _ -> error ("putNode: expected node-start event instead of " ++ show t)
 
       where
@@ -150,10 +174,12 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
                (putKey xs (\ys -> go n False BlockOut ys g))
         _  ->  anchorTag'' (Left ws) anc tag $ doEol <> g xs
       where
+        g (Comment com: rest) = goComment n True c' com (g rest)
         g (MappingEnd : rest) = cont rest
         g ys                  = pfx <> putKey ys (\zs -> go n False (if FlowIn == c then FlowIn else BlockOut) zs g)
 
-        pfx = if (c == BlockIn || c == BlockOut || c == BlockKey ) then mkInd n else ws 
+        pfx = if c == BlockIn || c == BlockOut || c == BlockKey then mkInd n else ws 
+        c' = if FlowIn == c then FlowKey else BlockKey
         
         doEol = case c of
           FlowKey -> mempty
@@ -161,13 +187,23 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
           _       -> eol
 
         putKey zs cont2
-          | isSmallKey zs =    go n (n == 0) (if FlowIn == c then FlowKey else BlockKey) zs (\ys -> ":" <> cont2 ys)
-          | FlowIn <- c   = "?" <> go n False BlockIn zs (\ys -> ws <> mkInd (n-1) <> ":" <> cont2 ys)
-          | otherwise     = "?" <> go n False BlockIn zs (\ys -> mkInd n <> ":" <> cont2 ys)
+          | (Comment com: rest) <- zs = goComment n True c com (pfx <> putKey rest cont2)
+          | isSmallKey zs =    go n (n == 0) c' zs (if isComEv zs then putValue cont2 else (\ys -> ":" <> cont2 ys))
+          | FlowIn <- c   = "?" <> go n False BlockIn zs (putValue cont2)
+          | otherwise     = "?" <> go n False BlockIn zs (putValue cont2)
+
+        putValue cont2 zs
+          | Comment com: rest <- zs = goComment n True c com (putValue cont2 rest)
+          | FlowIn <- c   = ws <> mkInd (n-1) <> ":" <> cont2 zs
+          | otherwise     = mkInd n <> ":" <> cont2 zs
 
     goMap n sol c anc tag Flow xs cont = 
-        wsSol sol <> anchorTag'' (Right ws) anc tag ("{" <> eol <> mkInd n' <> (putKey xs (\ys -> go n' False (inFlow c) ys g)))
+        wsSol sol <> anchorTag'' (Right ws) anc tag ("{" <> f xs)
           where
+            f (Comment com: rest) = goComment n' False FlowKey com (f rest)
+            f (MappingEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "}" <> doEol <> cont rest
+            f ys                  = eol <> mkInd n' <> (putKey ys (\zs -> go n' False (inFlow c) zs g))
+
             n' = n + 1
 
             doEol = case c of
@@ -175,12 +211,19 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
               FlowIn  -> mempty
               _       -> eol
 
-            g (MappingEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "}"<> doEol <> cont rest
-            g ys                  = "," <> eol<> mkInd n'<> putKey ys (\zs -> go n' False FlowIn zs g)
+            g (Comment com: rest) = "," <> goComment n' False c com (f rest)
+            g (MappingEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "}" <> doEol <> cont rest
+            g ys                  = "," <> eol <> mkInd n' <> putKey ys (\zs -> go n' False FlowIn zs g)
 
             putKey zs cont2
-              | isSmallKey zs =    go n' (n == 0) FlowKey zs (\ys -> ":" <> cont2 ys)
-              | otherwise     = "?" <> go n' False FlowIn zs (\ys ->eol<> mkInd n' <> ":" <> cont2 ys)
+              | (Comment com: rest) <- zs = goComment n' True c com (eol <> mkInd n' <> putKey rest cont2)
+              | isSmallKey zs =    go n' (n == 0) FlowKey zs (if isComEv zs then putValue cont2 else (\ys -> ":" <> cont2 ys))
+              | otherwise     = "?" <> go n False FlowIn zs (putValue cont2)
+
+            putValue cont2 zs
+              | Comment com: rest <- zs = goComment n' True c com (putValue cont2 rest)
+              | otherwise     = eol <> mkInd n' <> ":" <> cont2 zs
+
 
 
     goSeq _ sol _ anc tag _ (SequenceEnd : rest) cont = pfx $ "[]\n" <> cont rest
@@ -188,13 +231,13 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         pfx cont' = wsSol sol <> anchorTag'' (Right ws) anc tag cont'
 
     goSeq n sol c anc tag Block xs cont = case c of      
-        BlockOut -> anchorTag'' (Left ws) anc tag (eol <> mkInd n' <> "-" <> go n' False BlockIn xs g)
+        BlockOut -> anchorTag'' (Left ws) anc tag (eol <> g xs)
 
         BlockIn
           | not sol && n == 0 {- "---" case -} -> goSeq n sol BlockOut anc tag Block xs cont
-          | otherwise -> wsSol sol <> anchorTag'' (Right (eol <> mkInd n')) anc tag ("-" <> go n' False BlockIn xs g)
+          | otherwise -> wsSol sol <> anchorTag'' (Right (eol <> mkInd n')) anc tag (if isComEv xs then g xs else "-" <> go n' False BlockIn xs g)
 
-        BlockKey -> error ("sequence in block-key context not supported")
+        BlockKey -> error "sequence in block-key context not supported"
 
         _ -> error "Invalid Context in Block style"
 
@@ -202,13 +245,17 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         n' | BlockOut <- c = max 0 (n - 1)
            | otherwise     = n
 
+        g (Comment com: rest)  = goComment n' True c com (g rest)
         g (SequenceEnd : rest) = cont rest
         g ys                   = mkInd n' <> "-" <> go n' False BlockIn ys g
 
     goSeq n sol c anc tag Flow xs cont = 
-      wsSol sol <> anchorTag'' (Right ws) anc tag ("[" <> eol <> mkInd n' <> go n' False (inFlow c) xs g)
-
+      wsSol sol <> anchorTag'' (Right ws) anc tag ("[" <> f xs)
         where
+          f (Comment com: rest)  = goComment n' False c com (f rest)
+          f (SequenceEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "]" <> doEol <> cont rest
+          f ys                   = eol <> mkInd n' <> go n' False (inFlow c) ys g 
+
           n' = n + 1
 
           doEol = case c of
@@ -216,6 +263,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
             FlowIn  -> mempty
             _       -> eol
 
+          g (Comment com: rest)  = "," <> goComment n' False c com (f rest)
           g (SequenceEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "]" <> doEol <> cont rest
           g ys                   = "," <> eol <> mkInd n' <> go n' False (inFlow c) ys g
 
@@ -285,7 +333,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         g []     _ cont' = eol <> cont'
         g (x:xs) dig cont'
           | T.null x   = eol <> g xs dig cont'
-          | dig == 0   = eol <> mkInd (n) <> T.B.fromText x <> g xs dig cont'
+          | dig == 0   = eol <> (if n > 0 then mkInd n else mkInd' 1) <> T.B.fromText x <> g xs dig cont'      
           | otherwise  = eol <> mkInd (n-1) <> mkInd' dig <> T.B.fromText x <> g xs dig cont'
 
         g' []     cont' = cont'
@@ -330,33 +378,40 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
     -- anchorTag  = anchorTag'' (Right (T.B.singleton ' '))
     -- anchorTag' = anchorTag'' (Left (T.B.singleton ' '))
 
-    -- indentation helper
-    mkInd (-1) = mempty
-    mkInd 0    = mempty
-    mkInd 1 = "  "
-    mkInd 2 = "    "
-    mkInd 3 = "      "
-    mkInd 4 = "        "
-    mkInd l
-      | l < 0     = error (show l)
-      | otherwise = T.B.fromText (T.replicate l "  ")
+isComEv :: [Event] -> Bool
+isComEv (Comment _: _) = True
+isComEv _ = False
 
-    mkInd' 1 = " "
-    mkInd' 2 = "  "
-    mkInd' 3 = "   "
-    mkInd' 4 = "    "
-    mkInd' 5 = "     "
-    mkInd' 6 = "      "
-    mkInd' 7 = "       "
-    mkInd' 8 = "        "
-    mkInd' 9 = "         "
-    mkInd' l = error ("Impossible Indentation-level" ++ show l)
+-- indentation helper
+mkInd :: Int -> T.B.Builder
+mkInd (-1) = mempty
+mkInd 0    = mempty
+mkInd 1 = "  "
+mkInd 2 = "    "
+mkInd 3 = "      "
+mkInd 4 = "        "
+mkInd l
+  | l < 0     = error (show l)
+  | otherwise = T.B.fromText (T.replicate l "  ")
 
-    eol = T.B.singleton '\n'
-    ws  = T.B.singleton ' '
+mkInd' :: Int -> T.B.Builder
+mkInd' 1 = " "
+mkInd' 2 = "  "
+mkInd' 3 = "   "
+mkInd' 4 = "    "
+mkInd' 5 = "     "
+mkInd' 6 = "      "
+mkInd' 7 = "       "
+mkInd' 8 = "        "
+mkInd' 9 = "         "
+mkInd' l = error ("Impossible Indentation-level" ++ show l)
 
-    wsSol :: Bool -> T.B.Builder
-    wsSol sol = if sol then mempty else ws
+eol, ws:: T.B.Builder
+eol = T.B.singleton '\n'
+ws  = T.B.singleton ' '
+
+wsSol :: Bool -> T.B.Builder
+wsSol sol = if sol then mempty else ws
 
 escapeDQ :: Text -> Text
 escapeDQ t
