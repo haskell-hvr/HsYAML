@@ -549,12 +549,12 @@ cmdRunTml' args = do
               evs'' = map (ev2str False) events 
           if evs'' == testEvDat
              then do
-               -- let outYamlDatIut = writeEvents YT.UTF8 (map eEvent evs')                -- Allow both block and flow style
-               let outYamlDatIut = writeEvents YT.UTF8 (map (toBlockStyle. eEvent) evs')   -- Allow only Block style
-                    where toBlockStyle ev = case ev of
-                                              SequenceStart a b _ -> SequenceStart a b Block
-                                              MappingStart a b _  -> MappingStart a b Block
-                                              otherwise           -> ev
+               let outYamlDatIut = writeEvents YT.UTF8 (map eEvent evs')                -- Allow both block and flow style
+               -- let outYamlDatIut = writeEvents YT.UTF8 (map (toBlockStyle. eEvent) evs')   -- Allow only Block style
+               --      where toBlockStyle ev = case ev of
+               --                                SequenceStart a b _ -> SequenceStart a b Block
+               --                                MappingStart a b _  -> MappingStart a b Block
+               --                                otherwise           -> ev
                    Right ev = sequence $ parseEvents outYamlDatIut
                    outYamlEvsIut = either (const []) (map (ev2str False)) (Right (map eEvent (filter (not. isComment'. eEvent) ev)))
 

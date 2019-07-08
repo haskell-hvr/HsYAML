@@ -104,7 +104,7 @@ goComment !n !sol c comment cont = doSol <> "#" <> (T.B.fromText comment) <> doE
   where
     doEol
       | not sol && n == 0 =  mempty           -- "--- " case
-      | not sol && FlowOut == c = mempty 
+      | sol && FlowIn == c = mempty 
       | otherwise = eol
 
     doSol 
@@ -200,7 +200,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
     goMap n sol c anc tag Flow xs cont = 
         wsSol sol <> anchorTag'' (Right ws) anc tag ("{" <> f xs)
           where
-            f (Comment com: rest) = goComment n' False FlowKey com (f rest)
+            f (Comment com: rest) = eol <> wsSol sol <> goComment n' True (inFlow c) com (f rest)
             f (MappingEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "}" <> doEol <> cont rest
             f ys                  = eol <> mkInd n' <> (putKey ys (\zs -> go n' False (inFlow c) zs g))
 
@@ -211,7 +211,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
               FlowIn  -> mempty
               _       -> eol
 
-            g (Comment com: rest) = "," <> goComment n' False c com (f rest)
+            g (Comment com: rest) = "," <> eol <> wsSol sol <> goComment n' True (inFlow c) com (f rest)
             g (MappingEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "}" <> doEol <> cont rest
             g ys                  = "," <> eol <> mkInd n' <> putKey ys (\zs -> go n' False FlowIn zs g)
 
@@ -221,7 +221,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
               | otherwise     = "?" <> go n False FlowIn zs (putValue cont2)
 
             putValue cont2 zs
-              | Comment com: rest <- zs = goComment n' True c com (putValue cont2 rest)
+              | Comment com: rest <- zs =  eol <> wsSol sol <> goComment n' True (inFlow c) com (putValue cont2 rest)
               | otherwise     = eol <> mkInd n' <> ":" <> cont2 zs
 
 
@@ -252,7 +252,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
     goSeq n sol c anc tag Flow xs cont = 
       wsSol sol <> anchorTag'' (Right ws) anc tag ("[" <> f xs)
         where
-          f (Comment com: rest)  = goComment n' False c com (f rest)
+          f (Comment com: rest)  = eol <> wsSol sol <> goComment n' True (inFlow c) com (f rest)
           f (SequenceEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "]" <> doEol <> cont rest
           f ys                   = eol <> mkInd n' <> go n' False (inFlow c) ys g 
 
@@ -263,7 +263,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
             FlowIn  -> mempty
             _       -> eol
 
-          g (Comment com: rest)  = "," <> goComment n' False c com (f rest)
+          g (Comment com: rest)  = "," <> eol <> wsSol sol <> goComment n' True (inFlow c) com (f rest)
           g (SequenceEnd : rest) = eol <> wsSol sol <> mkInd (n - 1) <> "]" <> doEol <> cont rest
           g ys                   = "," <> eol <> mkInd n' <> go n' False (inFlow c) ys g
 
