@@ -24,7 +24,7 @@
 
 ### We Use [Github Flow](https://guides.github.com/introduction/flow/index.html), So All Code Changes Happen Through Pull Requests
 
-Pull requests are the best way to propose changes to the codebase (we use [Github Flow](https://guides.github.com/introduction/flow/index.html)). 
+Pull requests are the best way to propose changes to the codebase.  
 We actively welcome your pull requests:
 
 1. Fork the repo and create your branch from `master`.
@@ -34,15 +34,14 @@ We actively welcome your pull requests:
 
 ### Testing
 
-Run the following list of commands to see if the changes satisfy the tests
+Browse to the directory where all the files of this repository are located.   
+Run the following command to see if the changes satisfy the tests.
 
-* Browse to the directory where all the files of this repository are located.  
-* ```cabal test```
+```cabal test```
 
 HsYAML is also tested using [YAML-Test-Suite](https://github.com/yaml/yaml-test-suite). 
-Run the following list of commands to see the updated performance on YAML-Test-Suite and mention the results in the pull request.
+Run the following list of commands to see the updated performance on YAML-Test-Suite and mention the results in the pull request.  
 
-* Browse to the directory where all the files of this repository are located.  
 * Download/Clone the [YAML-Test-Suite](https://github.com/yaml/yaml-test-suite) repository.
 ```
 git clone https://github.com/yaml/yaml-test-suite.git
