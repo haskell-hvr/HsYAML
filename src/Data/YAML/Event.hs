@@ -5,17 +5,33 @@
 -- Copyright: © Herbert Valerio Riedel 2015-2018
 -- SPDX-License-Identifier: GPL-2.0-or-later
 --
--- Event-stream oriented YAML parsing API
+-- Event-stream oriented YAML parsing and serializing API
 module Data.YAML.Event
-    ( parseEvents
+    ( 
+      -- * Tutorial
+      -- $start
+
+      -- ** Parsing YAML Documents
+      -- $parsing
+      parseEvents
+
+      -- ** Serializing Events to YAML Character Stream
+      -- $serialize
     , writeEvents
     , writeEventsText
+
+      -- ** How to comment your yaml document for best results
+      -- $commenting
+
+      -- ** Event-stream Internals
     , EvStream
     , Event(..)
     , EvPos(..)
     , Directives(..)
     , ScalarStyle(..)
     , NodeStyle(..)
+    , Chomp(..)
+    , IndentOfs(..)
     , Tag, untagged, isUntagged, tagToText, mkTag
     , Anchor
     , Pos(..)
@@ -55,19 +71,23 @@ mkTag'' :: String -> Tag
 mkTag'' "" = error "mkTag''"
 mkTag'' s  = Tag (Just $! T.pack ("tag:yaml.org,2002:" ++ s))
 
-
+-- Returns the position corresponding to the 'Token'
 tok2pos :: Y.Token -> Pos
 tok2pos Y.Token { Y.tByteOffset = posByteOffset, Y.tCharOffset = posCharOffset, Y.tLine = posLine, Y.tLineChar = posColumn } = Pos {..}
 
+-- Construct a 'EvPos' from the given 'Event' and 'Pos'
 getEvPos :: Event -> Y.Token -> EvPos
 getEvPos ev tok = EvPos { eEvent = ev , ePos = tok2pos tok } 
 
+-- Initial position('Pos' corresponding to the 'StreamStart')
 initPos :: Pos
 initPos = Pos { posByteOffset = 0 , posCharOffset = 0  , posLine = 1 , posColumn = 0 }
 
+-- Initial 'EvPos'
 initEvPos :: Event -> EvPos
 initEvPos ev = EvPos { eEvent = ev, ePos = initPos }
 
+-- Pair Event with the corresponding Event-Start Position.
 delayPos :: Pos -> EvStream -> EvStream
 delayPos _ [] = []
 delayPos pos (Right EvPos{  eEvent = a ,ePos = nextPos } : rest ) = (Right EvPos{ eEvent = a , ePos = pos}: delayPos nextPos rest)
@@ -110,9 +130,15 @@ getUriTag toks0 = do
 
 -- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
 --
+-- The parsed Events allow us to round-trip at the event-level while preserving many features and presentation details like 
+-- 'Comment's,'ScalarStyle','NodeStyle', 'Anchor's, 'Directives' marker along with YAML document version, 
+-- 'Chomp'ing Indicator,Indentation Indicator ('IndentOfs') ,ordering, etc. 
+-- It does not preserve non-content white spaces.
+--
 -- The input 'BS.L.ByteString' is expected to have a YAML 1.2 stream
 -- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
 -- (which will be auto-detected).
+
 parseEvents :: BS.L.ByteString -> EvStream
 parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ filter (not . isWhite) $ Y.tokenize bs0 False)
   where
@@ -499,3 +525,297 @@ unescape [c] = Map.lookup c m
       ]
 unescape _ = Nothing
 
+-- 
+-- $start
+-- 
+-- "Data.YAML" module provides us with API which allow us to interact with YAML data at the cost of some presentation details.
+-- In contrast, this module provide us with API which gives us access to a other significant details like 'ScalarStyle's, 'NodeStyle's, 'Comment's, etc.
+--
+-- $parsing
+--
+-- Suppose you want to parse this YAML Document while preserving its format and comments
+--
+-- @
+-- # Home runs
+-- hr:  65
+-- # Runs Batted In
+-- rbi: 147
+-- @
+--
+-- then you might want to use the function 'parseEvents'.
+-- 
+-- The following is a reference implementation of a function using 'parseEvents'.
+-- It takes a YAML document as input and prints the parsed YAML 'Event's.
+--
+-- @
+-- import Data.YAML.Event
+-- import qualified Data.ByteString.Lazy as BS.L
+--
+-- printEvents :: BS.L.ByteString -> IO ()
+-- printEvents input = 
+--   forM_ ('parseEvents' input) $ \ev -> case ev of
+--     Left _ -> error "Failed to parse"
+--     Right event -> print ('eEvent' event)
+-- @
+--
+-- When we pass the above mentioned YAML document to the function /printEvents/ it outputs the following:
+--
+-- > StreamStart
+-- > DocumentStart NoDirEndMarker
+-- > MappingStart Nothing Nothing Block
+-- > Comment " Home runs"
+-- > Scalar Nothing Nothing Plain "hr"
+-- > Scalar Nothing Nothing Plain "65"
+-- > Comment " Runs Batted In"
+-- > Scalar Nothing Nothing Plain "rbi"
+-- > Scalar Nothing Nothing Plain "147"
+-- > MappingEnd
+-- > DocumentEnd False
+-- > StreamEnd
+--
+-- Notice that now we have all the necessary details in the form of 'Event's.
+--
+-- We can now write simple functions to work with this data without losing any more details.
+-- 
+-- $serialize
+--
+-- Now, suppose we want to generate back the YAML document after playing with the Event-stream,
+-- then you might want to use 'writeEvents'.
+--
+-- The following function takes a YAML document as a input and dumps it back to STDOUT after a round-trip.
+--
+-- @
+-- import Data.YAML.Event
+-- import qualified Data.YAML.Token as YT 
+-- import qualified Data.ByteString.Lazy as BS.L
+--
+-- yaml2yaml :: BS.L.ByteString -> IO ()
+-- yaml2yaml input = case sequence $ parseEvents input of
+--     Left _ -> error "Parsing Failure!"
+--     Right events -> do
+--       BS.L.hPutStr stdout (writeEvents YT.UTF8 (map eEvent events))
+--       hFlush stdout
+-- @
+--
+-- Let this be the sample document passed to the above function
+--
+-- @
+-- # This is a 'Directives' Marker
+-- ---
+-- # All 'Comment's are preserved
+-- date    : 2019-07-12
+-- bill-to : # 'Anchor' represents a map node
+--    &id001 
+--     address:
+--         lines: # This a Block 'Scalar' with 'Keep' chomping Indicator and 'IndentAuto' Indentant indicator
+--                 |+ # Extra Indentation (non-content white space) will not be preserved
+--                       Vijay
+--                       IIT Hyderabad
+--
+--
+--         # Trailing newlines are a preserved here as they are a part of the 'Scalar' node
+--         country    : India
+-- ship-to  : # This is an 'Alias'
+--            *id001
+-- # Key is a 'Scalar' and Value is a Sequence
+-- Other Details: 
+--           total: $ 3000
+--           # 'Tag's are also preserved
+--           Online Payment: !!bool True 
+--           product:
+--               - Item1 
+--               # This comment is inside a Sequence
+--               - Item2
+-- ... 
+-- # 'DocumentEnd' True
+-- # 'StreamEnd'
+-- @
+--
+-- This function outputs the following
+--
+-- @
+-- # This is a 'Directives' Marker
+-- ---
+-- # All 'Comment's are preserved
+-- date: 2019-07-12
+-- bill-to: # 'Anchor' represents a map node
+--   &id001
+--   address:
+--     lines: # This a Block 'Scalar' with 'Keep' chomping Indicator and 'IndentAuto' Indentant indicator
+--       # Extra Indentation (non-content white space) will not be preserved
+--       |+
+--       Vijay
+--       IIT Hyderabad
+-- 
+-- 
+--     # Trailing newlines are a preserved here as they are a part of the 'Scalar' node
+--     country: India
+-- ship-to: # This is an 'Alias'
+--   *id001
+-- # Key is a 'Scalar' and Value is a Sequence
+-- Other Details:
+--   total: $ 3000
+--   # 'Tag's are also preserved
+--   Online Payment: !!bool True
+--   product:
+--   - Item1
+--   # This comment is inside a Sequence
+--   - Item2
+-- ...
+-- # 'DocumentEnd' True
+-- # 'StreamEnd'
+-- @
+--
+-- $commenting
+--
+-- Round-tripping at event-level will preserve all the comments and their relative position in the YAML-document but still, 
+-- we lose some information like the exact indentation and the position at which the comments were present previously. 
+-- This information sometimes can be quiet important for human-perception of comments.
+-- Below are some guildlines, so that you can avoid ambiguities.
+-- 
+-- 1) Always try to start your comment in a newline. This step will avoid most of the ambiguities.
+--
+-- 2) Comments automaticly get indented according to the level in which they are present. For example,
+--
+-- Input YAML-document
+--
+-- @
+-- # Level 0
+-- - a
+-- # Level 0
+-- - - a
+-- # Level 1
+--   - a
+--   - - a
+-- # Level 2
+--     - a
+-- @
+--
+-- After a round-trip looks like
+--
+-- @
+-- # Level 0
+-- - a
+-- # Level 0
+-- - - a
+--   # Level 1
+--   - a
+--   - - a
+--     # Level 2
+--     - a
+-- @
+--
+-- 3) Comments immediately after a 'Scalar' node, start from a newline. So avoid commenting just after a scalar ends, as it may lead to some ambiguity. For example,
+--
+-- Input YAML-document
+--
+-- @
+-- - scalar # After scalar
+-- - random  : scalar # After scalar 
+--   key: 1
+-- # not after scalar
+-- - random  : scalar
+--   key: 1
+-- - random  : # not after scalar
+--             scalar
+--   # not after scalar
+--   key: 1 
+-- @
+--
+-- After a round-trip looks like
+--
+-- @
+-- - scalar
+-- # After scalar
+-- - random: scalar
+--   # After scalar 
+--   key: 1
+--   # not after scalar
+-- - random: scalar
+--   key: 1
+-- - random: # not after scalar
+--     scalar
+--   # not after scalar
+--   key: 1
+-- @
+--
+-- 4) Similarly in flow-style, avoid commenting immediately after a /comma/ (@,@) seperator. Comments immediately after a /comma/ (@,@) seperator will start from a new line
+--
+-- Input YAML-document
+--
+-- @
+-- {
+--     # comment 0
+--     Name: Vijay # comment 1
+--     ,
+--     # comment 2
+--     age: 19, # comment 3
+--     # comment 4
+--     country: India # comment 5
+-- }
+-- @
+--
+-- After a round-trip looks like
+--
+-- @
+-- {
+--   # comment 0
+--   Name: Vijay,
+--   # comment 1
+--   # comment 2
+--   age: 19,
+--   # comment 3
+--   # comment 4
+--   country: India,
+--   # comment 5
+-- }
+-- @
+--
+-- 5) Avoid commenting in between syntatical elements. For example,
+--
+-- Input YAML-document
+--
+-- @
+-- ? # Complex key starts
+--   [
+--      a,
+--      b
+--   ]
+--  # Complex key ends
+-- : # Complex Value starts
+--   ? # Complex key starts
+--     [
+--        a,
+--        b
+--     ]
+--     # Complex key ends
+--   : # Simple value
+--     a
+--   # Complex value ends
+-- @
+--
+-- After a round-trip looks like
+--
+-- @
+-- ? # Complex key starts
+--   [
+--      a,
+--      b
+--  ]
+-- : # Complex key ends
+--   # Complex Value starts
+--
+--   ? # Complex key starts
+--     [
+--        a,
+--        b
+--    ]
+--   : # Complex key ends
+--     # Simple value
+--     a
+--   # Complex value ends
+-- @
+--
+-- The above two YAML-documents, after parsing produce the same 'Event'-stream. 
+--
+-- So, these are some limitation of this Format-preserving YAML processor.

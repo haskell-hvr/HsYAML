@@ -1,6 +1,23 @@
 ## 0.2.0.0
 
+* Changes in `Data.YAML` module
+    * YAML 1.2 Schema encoders (#21)
+    * New `ToYAML` class for encoding Haskell Data-types from which YAML nodes can be constructed (#20)
+        * New functions like `encodeNode`, `encodeNode'` for constructing AST.
+        * New functions like `encode`, `encode1`, `encodeStrict`, `encode1Strict` for supporting typeclass-based dumping
+        * Some ToYAML instances and other api
+    * Modify `typeMismatch` function to show error source location in error messages (#19)
+
 * Changes in `Data.YAML.Event` module
+    * Preserve and round-trip Comments at Event level(#24)
+        * New  `Comment` Event to preserve comments while parsing
+        * Some additional implementations to preserve and round-trip comments
+    * Fix issue #22
+    * New `EvPos` type for recording event and their corresponding position (#19)
+    * Preserve Flow Mapping and Flow sequence (#18)
+    * Features to preserve Literal/Folded ScalarStyle (#15)
+        * New `Chomp` type denoting Block Chomping Indicator
+        * New `IndentOfs` type denoting Block Indentation Indicator
     * New `NodeStyle` type denoting flow/block style
     * `Event(SequenceStart,MappingStart)` constructors now record `NodeStyle`
     * `Style` type renamed to `ScalarType`
@@ -13,6 +30,8 @@
   duplicate keys (under the respective YAML schema) in YAML mappings
   as a loader-error (controllable via new
   `schemaResolverMappingDuplicates` schema property)
+
+* Fix X38W testcase (#13, #14)
 
 ---
 

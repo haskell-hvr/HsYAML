@@ -9,60 +9,24 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
 --
 -- Document oriented [YAML](http://yaml.org/spec/1.2/spec.html) parsing API inspired by [aeson](http://hackage.haskell.org/package/aeson).
---
--- === Overview
---
--- The diagram below depicts the standard layers of a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) processor. This module covers the upper /Native/ and /Representation/ layers, whereas the "Data.YAML.Event" and "Data.YAML.Token" modules provide access to the lower /Serialization/ and /Presentation/ layers respectively.
---
--- <<http://yaml.org/spec/1.2/overview2.png>>
---
--- === Quick Start Tutorial
---
--- Let's assume we want to decode (i.e. /load/) a simple YAML document
---
--- > - name: Erik Weisz
--- >   age: 52
--- >   magic: True
--- > - name: Mina Crandon
--- >   age: 53
---
--- into a native Haskell data structure of type @[Person]@, i.e. a list of 'Person' records.
---
--- The code below shows how to manually define a @Person@ record type together with a 'FromYAML' instance:
---
--- > {-# LANGUAGE OverloadedStrings #-}
--- >
--- > import Data.YAML
--- >
--- > data Person = Person
--- >     { name  :: Text
--- >     , age   :: Int
--- >     , magic :: Bool
--- >     } deriving Show
--- >
--- > instance FromYAML Person where
--- >    parseYAML = withMap "Person" $ \m -> Person
--- >        <$> m .: "name"
--- >        <*> m .: "age"
--- >        <*> m .:? "magic" .!= False
---
--- And now we can 'decode' the YAML document like so:
---
--- >>> decode "- name: Erik Weisz\n  age: 52\n  magic: True\n- name: Mina Crandon\n  age: 53" :: Either String [[Person]]
--- Right [[Person {name = "Erik Weisz", age = 52, magic = True},Person {name = "Mina Crandon", age = 53, magic = False}]]
---
---
+
 module Data.YAML
     (
-      -- * Typeclass-based dumping
-      encode
-    , encode1
-    , encodeStrict
-    , encode1Strict
-    , ToYAML(..)
+
+      -- * Overview
+      -- $overview
+
+      -- * Quick Start Tutorial
+      -- $start
+
+      -- ** Decoding/Loading YAML document
+      -- $loading
+
+      -- ** Encoding/dumping
+      -- $dumping
 
       -- * Typeclass-based resolving/decoding
-    , decode
+      decode
     , decode1
     , decodeStrict
     , decode1Strict
@@ -75,6 +39,14 @@ module Data.YAML
     , Mapping
     , (.:), (.:?), (.:!), (.!=)
 
+      -- * Typeclass-based dumping
+    , encode
+    , encode1
+    , encodeStrict
+    , encode1Strict
+    , ToYAML(..)
+
+      -- ** Accessors for encoding
     , mapping
     , (.=)
 
@@ -129,6 +101,78 @@ import           Data.YAML.Loader
 import           Data.YAML.Schema
 
 import           Util
+
+-- $overview
+--
+-- The diagram below depicts the standard layers of a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) processor. This module covers the upper /Native/ and /Representation/ layers, whereas the "Data.YAML.Event" and "Data.YAML.Token" modules provide access to the lower /Serialization/ and /Presentation/ layers respectively.
+--
+-- <<http://yaml.org/spec/1.2/overview2.png>>
+--
+-- $start
+-- 
+-- This section contains basic information on the different ways to work with YAML data using this library. 
+-- 
+-- $loading
+--
+-- We address the process of loading data from a YAML document as decoding.
+--
+-- Let's assume we want to decode (i.e. /load/) a simple YAML document
+--
+-- > - name: Erik Weisz
+-- >   age: 52
+-- >   magic: True
+-- > - name: Mina Crandon
+-- >   age: 53
+--
+-- into a native Haskell data structure of type @[Person]@, i.e. a list of 'Person' records.
+--
+-- The code below shows how to manually define a @Person@ record type together with a 'FromYAML' instance:
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- >
+-- > import Data.YAML
+-- >
+-- > data Person = Person
+-- >     { name  :: Text
+-- >     , age   :: Int
+-- >     , magic :: Bool
+-- >     } deriving Show
+-- >
+-- > instance FromYAML Person where
+-- >    parseYAML = withMap "Person" $ \m -> Person
+-- >        <$> m .: "name"
+-- >        <*> m .: "age"
+-- >        <*> m .:? "magic" .!= False
+--
+-- And now we can 'decode' the YAML document like so:
+--
+-- >>> decode "- name: Erik Weisz\n  age: 52\n  magic: True\n- name: Mina Crandon\n  age: 53" :: Either String [[Person]]
+-- Right [[Person {name = "Erik Weisz", age = 52, magic = True},Person {name = "Mina Crandon", age = 53, magic = False}]]
+--
+-- There are predefined 'FromYAML' instance for many types.
+--
+-- The example below shows decoding multiple YAML documents into a list of 'Int' lists:
+--
+-- >>> decode "---\n- 1\n- 2\n- 3\n---\n- 4\n- 5\n- 6" :: Either String [[Int]]
+-- Right [[1,2,3],[4,5,6]]
+--
+-- If you are expecting exactly one YAML document then you can use convenience function 'decode1'
+--
+-- >>> decode1 "- 1\n- 2\n- 3\n" :: Either String [Int]
+-- Right [1,2,3]
+--
+-- == Working with AST
+--
+-- Sometimes we want to work with YAML data directly, without first converting it to a custom data type.
+--
+-- We can easily do that by using the 'Node' type, which is an instance of 'FromYAML', is used to represent an arbitrary YAML AST (abstract syntax tree). For example,
+--
+-- >>> decode1 "Name: Vijay" :: Either String (Node Pos)
+-- Right (Mapping (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) Just "tag:yaml.org,2002:map" (fromList [(Scalar (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) (SStr "Name"),Scalar (Pos {posByteOffset = 4, posCharOffset = 4, posLine = 1, posColumn = 4}) (SStr "Vijay"))]))
+--
+-- The type parameter 'Pos' is used to indicate the position of each YAML 'Node' in the document. 
+-- So using the 'Node' type we can easily decode any YAML document.
+
 
 -- | Retrieve value in 'Mapping' indexed by a @!!str@ 'Text' key.
 --
@@ -510,6 +554,36 @@ decode1Strict text = do
   vs <- decodeStrict text
   maybe (Left "expected unique") Right $ listToMaybe vs
 
+
+
+-- $dumping
+--
+-- We address the process of dumping information from a Haskell-data type(s) to a YAML document(s) as encoding.
+-- 
+-- Suppose we want to encode a Haskell-data type Person
+-- @
+-- data Person = Person {
+--       name :: Text
+--     , age  :: Int
+--     } deriving Show
+--
+-- To encode data, we need to define a 'ToYAML' instance.
+-- @
+-- @
+-- instance 'ToYAML' Person where
+--     \-- this generates a 'Node'
+--     'toYAML' (Person n a) = 'mapping' [ "name" .= n, "age" .= a]
+-- @
+-- We can now encode a value like so:
+--
+-- >>> encode [Person {name = "Vijay", age = 19})
+-- "age: 19\nname: Vijay\n"
+--
+-- There are predefined 'ToYAML' instances for many types. Here's an example encoding a complex Haskell Node'
+--
+-- >>> encode1 $ toYAML ([1,2,3],Data.Map.fromList [(1, 2)])
+-- "- - 1\n  - 2\n  - 3\n- 1: 2\n"
+--
 
 
 -- | A type from which YAML nodes can be constructed

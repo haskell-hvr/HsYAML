@@ -1,5 +1,9 @@
 {-# LANGUAGE Safe #-}
 
+-- |
+-- Copyright: © Herbert Valerio Riedel 2015-2018
+-- SPDX-License-Identifier: GPL-2.0-or-later
+--
 module Data.YAML.Internal
     ( Node(..)
     , NodeId

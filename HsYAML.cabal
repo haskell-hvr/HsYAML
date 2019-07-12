@@ -2,7 +2,7 @@ cabal-version:       1.14
 name:                HsYAML
 version:             0.2.0.0
 
-synopsis:            Pure Haskell YAML 1.2 parser
+synopsis:            Pure Haskell YAML 1.2 parsing and encoding library
 homepage:            https://github.com/hvr/HsYAML
 bug-reports:         https://github.com/hvr/HsYAML/issues
 license:             GPL-2
@@ -17,7 +17,7 @@ build-type:          Simple
 tested-with:         GHC==8.6.1, GHC==8.4.3, GHC==8.4.1, GHC==8.2.2, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3, GHC==7.4.2
 
 description:
-  @HsYAML@ is a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) parser implementation for Haskell.
+  @HsYAML@ is a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) parsing and encoding library.
   .
   Features of @HsYAML@ include:
   .
