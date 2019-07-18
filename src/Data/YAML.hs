@@ -35,7 +35,7 @@ module Data.YAML
     , parseEither
     , typeMismatch
 
-      -- ** Accessors for YAML 'Mapping's
+      -- ** Accessors for YAML Mappings
     , Mapping
     , (.:), (.:?), (.:!), (.!=)
 
@@ -67,6 +67,7 @@ module Data.YAML
     , Doc(Doc)
     , Node(..)
     , Scalar(..)
+    , Pos(..)
 
       -- * YAML 1.2 Schema resolvers
     , SchemaResolver(..)
@@ -560,28 +561,33 @@ decode1Strict text = do
 --
 -- We address the process of dumping information from a Haskell-data type(s) to a YAML document(s) as encoding.
 -- 
--- Suppose we want to encode a Haskell-data type Person
+-- Suppose we want to 'encode' a Haskell-data type Person
+--
 -- @
 -- data Person = Person {
 --       name :: Text
 --     , age  :: Int
 --     } deriving Show
+-- @
 --
--- To encode data, we need to define a 'ToYAML' instance.
+-- To 'encode' data, we need to define a 'ToYAML' instance.
+--
 -- @
--- @
+--
 -- instance 'ToYAML' Person where
 --     \-- this generates a 'Node'
 --     'toYAML' (Person n a) = 'mapping' [ "name" .= n, "age" .= a]
+--
 -- @
--- We can now encode a value like so:
+--
+-- We can now 'encode' a node like so:
 --
 -- >>> encode [Person {name = "Vijay", age = 19})
 -- "age: 19\nname: Vijay\n"
 --
 -- There are predefined 'ToYAML' instances for many types. Here's an example encoding a complex Haskell Node'
 --
--- >>> encode1 $ toYAML ([1,2,3],Data.Map.fromList [(1, 2)])
+-- >>> encode1 $ toYAML ([1,2,3], Map.fromList [(1, 2)])
 -- "- - 1\n  - 2\n  - 3\n- 1: 2\n"
 --
 
@@ -590,7 +596,8 @@ decode1Strict text = do
 --
 -- @since 0.2.0.0
 class ToYAML a where
-  toYAML :: a -> Node () -- ^ Convert a Haskell value to a YAML Node data type.
+  -- | Convert a Haskell Data-type to a YAML Node data type.
+  toYAML :: a -> Node () 
 
 instance Loc loc => ToYAML (Node loc) where
   toYAML = toUnit
@@ -652,15 +659,33 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
 
 
 
--- | Serialize YAML Node(s) using the YAML 1.2 Core schema as a lazy 'BS.L.ByteString'.
+-- | Serialize YAML Node(s) using the YAML 1.2 Core schema to a lazy 'BS.L.ByteString'.
 --
 -- Each YAML Node produces exactly one YAML Document.
+--
+-- Here is example of encoding a list of strings to produce a list of YAML Documents
+--
+-- >>> encode (["Document 1", "Document 2"] :: [Text]) 
+-- "Document 1\n...\nDocument 2\n"
+--
+-- If we treat the above list of strings as a single sequence then we will produce a single YAML Document having a single sequence.
+--
+-- >>> encode ([["Document 1", "Document 2"]] :: [[Text]])
+-- "- Document 1\n- Document 2\n"
+-- 
+-- Alternatively, you might want to use 'encode1'
 --
 -- @since 0.2.0
 encode :: ToYAML v => [v] -> BS.L.ByteString
 encode vList = encodeNode $ map (Doc . toYAML) vList
 
--- | Convenience wrapper over 'encode' expecting exactly one YAML Node
+-- | Convenience wrapper over 'encode' expecting exactly one YAML Node. 
+-- Hence it will always output exactly one YAML Document
+--
+-- Here is example of encoding a list of strings to produce exactly one of YAML Documents
+--
+-- >>> encode1 (["Document 1", "Document 2"] :: [Text])
+-- "- Document 1\n- Document 2\n"
 --
 -- @since 0.2.0
 encode1 :: ToYAML v => v -> BS.L.ByteString
@@ -672,7 +697,7 @@ encode1 a = encode [a]
 encodeStrict :: ToYAML v => [v] -> BS.ByteString
 encodeStrict = bsToStrict . encode
 
--- | Like 'encode1' but but outputs 'BS.ByteString'
+-- | Like 'encode1' but outputs 'BS.ByteString'
 --
 -- @since 0.2.0
 encode1Strict :: ToYAML v => v -> BS.ByteString
