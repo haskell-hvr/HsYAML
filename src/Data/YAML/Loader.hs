@@ -48,10 +48,14 @@ data Loader m n = Loader
 {-# INLINEABLE decodeLoader #-}
 decodeLoader :: forall n m . MonadFix m => Loader m n -> BS.L.ByteString -> m (Either (YE.Pos, String) [n])
 decodeLoader Loader{..} bs0 = do
-    case sequence . YE.parseEvents $ bs0 of
+    case sequence $ filter (not. isComment) (YE.parseEvents bs0) of
       Left (pos,err) -> return $ Left (pos,err)
       Right evs      -> runParserT goStream evs
   where
+    isComment evPos = case evPos of
+      Right (YE.EvPos {eEvent = (YE.Comment _), ePos = _}) -> True
+      _ -> False 
+
     goStream :: PT n m [n]
     goStream = do
       _ <- satisfy (== YE.StreamStart)

@@ -104,6 +104,8 @@ main = do
 
     ("run-tml":args') -> cmdRunTml args'
 
+    ("run-tml2":args') -> cmdRunTml' args' -- Temp function for check comment round-trip
+
     ("testml-compiler":args') -> cmdTestmlCompiler args'
 
     _ -> do
@@ -122,6 +124,7 @@ main = do
       hPutStrLn stderr "  yaml2node           reads YAML stream from STDIN and dumps YAML Nodes to STDOUT"
       hPutStrLn stderr "  yaml2yaml-dump      reads YAML stream from STDIN and dumps YAML to STDOUT after a complete round-trip"
       hPutStrLn stderr "  run-tml             run/validate YAML-specific .tml file(s)"
+      hPutStrLn stderr "  run-tml2            run/validate YAML-specific .tml file(s) while preserving comments"
       hPutStrLn stderr "  testml-compiler     emulate testml-compiler"
 
       exitFailure
@@ -148,7 +151,7 @@ cmdYaml2Token0 = do
 cmdYaml2Yaml :: IO ()
 cmdYaml2Yaml = do
   inYamlDat <- BS.L.getContents
-  case (sequence $ parseEvents inYamlDat) of
+  case sequence $ parseEvents inYamlDat of
     Left (ofs,msg) -> do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
@@ -163,7 +166,7 @@ cmdYaml2Yaml' = do
     BS.L.hPutStr stdout $ writeEvents YT.UTF8 $ parseEvents' inYamlDat
     hFlush stdout
   where
-    parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) (\evPos -> eEvent evPos)) . parseEvents
+    parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) (\evPos -> eEvent evPos)). filter (not. isComment). parseEvents
 
 cmdYaml2Event :: IO ()
 cmdYaml2Event = do
@@ -173,8 +176,9 @@ cmdYaml2Event = do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right event -> do
-      hPutStrLn stdout (ev2str True (eEvent event))
-      hFlush stdout
+      print (eEvent event)
+      -- hPutStrLn stdout (ev2str True (eEvent event))
+      -- hFlush stdout
 
 cmdYaml2Event0 :: IO ()
 cmdYaml2Event0 = do
@@ -186,7 +190,7 @@ cmdYaml2Event0 = do
 cmdYaml2YamlVal :: IO() 
 cmdYaml2YamlVal = do
   inYamlDat <- BS.L.getContents
-  case sequence (parseEvents inYamlDat) of
+  case sequence $ parseEvents inYamlDat of
     Left (ofs,msg) -> do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
@@ -200,7 +204,7 @@ cmdYaml2YamlVal = do
           exitFailure
         Right newEvents -> do
           hPutStrLn stdout $ printf "\nInput  Event Stream Length: %d\nOutput Event Stream Length: %d\n" (length oldEvents) (length newEvents)
-          let diffList = filter (uncurry (/=)) $ zip oldEvents newEvents
+          let diffList = filter (uncurry (/=)) $ zipWith (\a b -> (eEvent a, eEvent b)) oldEvents newEvents
           hPutStrLn stdout $ printf "No of difference detected: %d\n" $ length diffList 
           forM_ diffList $ \(old,new) -> do 
             hPutStrLn stdout $ "Input  > " ++ show old
@@ -359,7 +363,7 @@ cmdRunTml args = do
 
           mOutYamlDat = BS.L.fromStrict . T.encodeUtf8 . unescapeSpcTab <$> lookup "out-yaml" dats
 
-      case sequence (parseEvents inYamlDat) of
+      case sequence $ filter (not. isComment) (parseEvents inYamlDat) of
         Left err
           | isErr -> do
               putStrLn "OK! (error)"
@@ -395,7 +399,7 @@ cmdRunTml args = do
                                               SequenceStart a b _ -> SequenceStart a b Block
                                               MappingStart a b _  -> MappingStart a b Block
                                               otherwise           -> ev
-                   Right ev = sequence $ parseEvents outYamlDatIut
+                   Right ev = sequence $ filter (not. isComment) (parseEvents outYamlDatIut)
                    outYamlEvsIut = either (const []) (map (ev2str False)) (Right (map eEvent ev))
 
                unless (outYamlEvsIut == evs'') $ do
@@ -491,6 +495,161 @@ cmdRunTml args = do
     , " (err: ", stat (Fail FailParse), ", ev:", stat (Fail FailEvs), ", json:", stat (Fail FailJson), ", yaml:", stat (Fail FailYaml), ", ok:", stat (Fail FailSuccess), ")"
     ]
 
+cmdRunTml' :: [FilePath] -> IO ()
+cmdRunTml' args = do
+  results <- forM args $ \fn -> do
+    tml <- BS.readFile fn
+
+    hPutStr stdout (fn ++ " : ")
+    hFlush stdout
+
+    TML.Document _ blocks <- either (fail . T.unpack) pure $ TML.parse fn (T.decodeUtf8 tml)
+
+    forM blocks $ \(TML.Block label points) -> do
+
+      let dats = [ (k,v) | TML.PointStr k v <- points ]
+
+      let isErr = isJust (lookup "error" dats)
+
+          Just inYamlDat = BS.L.fromStrict . T.encodeUtf8 . unescapeSpcTab <$> lookup "in-yaml" dats
+          Just testEvDat = lines . T.unpack . unescapeSpcTab <$> lookup "test-event" dats
+
+          mInJsonDat :: Maybe [J.Value]
+          mInJsonDat = (maybe (error ("invalid JSON in " ++ show fn)) id . J.decodeStrictN . T.encodeUtf8) <$> lookup "in-json" dats
+
+          mOutYamlDat = BS.L.fromStrict . T.encodeUtf8 . unescapeSpcTab <$> lookup "out-yaml" dats
+
+      case sequence $ parseEvents inYamlDat of  -- allow parsing with comments
+        Left err
+          | isErr -> do
+              putStrLn "OK! (error)"
+              pure (Pass PassExpErr)
+          | otherwise -> do
+              putStrLn "FAIL!"
+              putStrLn ""
+              putStrLn "----------------------------------------------------------------------------"
+              putStrLn' (T.unpack label)
+              putStrLn ""
+              putStrLn' (show err)
+              putStrLn ""
+              putStrLn' (show testEvDat)
+              putStrLn ""
+              BS.L.putStr inYamlDat
+              putStrLn ""
+              testParse inYamlDat
+              putStrLn ""
+              -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
+              putStrLn ""
+              putStrLn "----------------------------------------------------------------------------"
+              putStrLn ""
+              pure (Fail FailParse)
+
+        Right evs' -> do
+          let events = map eEvent (filter (not. isComment'. eEvent) evs')                     -- filter comments before comparing
+              evs'' = map (ev2str False) events 
+          if evs'' == testEvDat
+             then do
+               let outYamlDatIut = writeEvents YT.UTF8 (map eEvent evs')                -- Allow both block and flow style
+               -- let outYamlDatIut = writeEvents YT.UTF8 (map (toBlockStyle. eEvent) evs')   -- Allow only Block style
+               --      where toBlockStyle ev = case ev of
+               --                                SequenceStart a b _ -> SequenceStart a b Block
+               --                                MappingStart a b _  -> MappingStart a b Block
+               --                                otherwise           -> ev
+                   Right ev = sequence $ parseEvents outYamlDatIut
+                   outYamlEvsIut = either (const []) (map (ev2str False)) (Right (map eEvent (filter (not. isComment'. eEvent) ev)))
+
+               unless (outYamlEvsIut == evs'') $ do
+                 putStrLn' ("\nWARNING: (iut /= ref)")
+
+                 putStrLn' ("iut[yaml] = " ++ show outYamlDatIut)
+                 putStrLn' ("ref[raw-evs] = " ++ show evs')
+                 putStrLn' ("ref[evs] = " ++ show evs'')
+                 putStrLn' ("iut[evs] = " ++ show outYamlEvsIut)
+
+                 putStrLn ""
+
+
+               case mInJsonDat of
+                 Nothing -> do
+                   putStrLn "OK!"
+                   pure (Pass PassEvs)
+                 Just inJsonDat -> do
+                   iutJson <- either fail pure $ decodeAeson inYamlDat
+
+                   if iutJson == inJsonDat
+                     then do
+                       case mOutYamlDat of
+                         Nothing -> do
+                           putStrLn "OK! (+JSON)"
+                           pure (Pass PassEvsJson)
+                         Just outYamlDat -> do
+                           case () of
+                             _ | outYamlDat == outYamlDatIut -> do
+                                   putStrLn "OK! (+JSON+YAML)"
+                                   pure (Pass PassEvsJsonYaml)
+
+                               | otherwise -> do
+
+                                   putStrLn $ if outYamlEvsIut == evs'' then "OK (+JSON-YAML)" else "FAIL! (bad out-YAML)"
+
+                                   putStrLn' ("ref = " ++ show outYamlDat)
+                                   putStrLn' ("iut = " ++ show outYamlDatIut)
+                                   putStrLn ""
+                                   putStrLn' ("ref = " ++ show evs'')
+                                   putStrLn' ("iut = " ++ show outYamlEvsIut)
+
+                                   case outYamlEvsIut == evs'' of
+                                     True -> do
+                                       putStrLn' ("(iut == ref)")
+                                       pure (Pass PassEvsJson)
+                                     False -> pure (Fail FailYaml)
+
+
+                     else do
+                       putStrLn "FAIL! (bad JSON)"
+
+                       putStrLn' ("ref = " ++ show inJsonDat)
+                       putStrLn' ("iut = " ++ show iutJson)
+
+                       pure (Fail FailJson)
+
+             else do
+               if isErr
+                 then putStrLn "FAIL! (unexpected parser success)"
+                 else putStrLn "FAIL!"
+
+               putStrLn ""
+               putStrLn "----------------------------------------------------------------------------"
+               putStrLn' (T.unpack label)
+               putStrLn ""
+               putStrLn' ("ref = " ++ show testEvDat)
+               putStrLn' ("iut = " ++ show evs'')
+               putStrLn ""
+               BS.L.putStr inYamlDat
+               putStrLn ""
+               testParse inYamlDat
+               putStrLn ""
+               -- forM_ (parseEvents inYamlDat) (putStrLn' . show)
+               putStrLn ""
+               putStrLn "----------------------------------------------------------------------------"
+               putStrLn ""
+               pure (Fail (if isErr then FailSuccess else FailEvs))
+
+  putStrLn ""
+
+  let ok = length [ () | Pass _ <- results' ]
+      nok = length [ () | Fail _ <- results' ]
+
+      stat j = show $ Map.findWithDefault 0 j $ Map.fromListWith (+) [ (k,1::Int) | k <- results' ]
+
+      results' = concat results
+
+  putStrLn $ concat
+    [ "done -- passed: ", show ok
+    , " (ev: ", stat (Pass PassEvs), ", ev+json: ", stat (Pass PassEvsJson), ", ev+json+yaml: ", stat (Pass PassEvsJsonYaml), ", err: ", stat (Pass PassExpErr), ") / "
+    , "failed: ", show nok
+    , " (err: ", stat (Fail FailParse), ", ev:", stat (Fail FailEvs), ", json:", stat (Fail FailJson), ", yaml:", stat (Fail FailYaml), ", ok:", stat (Fail FailSuccess), ")"
+    ]
 
 -- | Incomplete proof-of-concept 'testml-compiler' operation
 cmdTestmlCompiler :: [FilePath] -> IO ()
@@ -530,6 +689,14 @@ printMap b = forM_ (Map.toList b) $ \(k,v) -> do
               hPutStr stdout "Value: "
               printNode v
 
+isComment evPos = case evPos of
+  Right (YE.EvPos {eEvent = (YE.Comment _), ePos = _}) -> True
+  _ -> False 
+
+isComment' ev = case ev of
+  (Comment _) -> True
+  _ -> False 
+
 ev2str :: Bool -> Event -> String
 ev2str withColSty = \case
     StreamStart                 -> "+STR"
@@ -548,6 +715,7 @@ ev2str withColSty = \case
     StreamEnd                   -> "-STR"
     Alias a                     -> "=ALI *"  ++ T.unpack a
     YE.Scalar manc mtag sty v   -> "=VAL"    ++ ancTagStr manc mtag ++ styStr sty ++ quote2 v
+    Comment comment             -> "=COMMENT "++ quote2 comment
   where
     styStr = \case
            Plain        -> " :"
