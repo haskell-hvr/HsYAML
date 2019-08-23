@@ -10,7 +10,7 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
 --
 module Util
-    ( liftEither
+    ( liftEither'
     , readMaybe
     , readEither
     , fromIntegerMaybe
@@ -31,12 +31,7 @@ import           Data.Int                     as X
 import           Data.Word                    as X
 import           Numeric.Natural              as X (Natural)
 
-#if !MIN_VERSION_mtl(2,2,2) || (__GLASGOW_HASKELL__ == 804 && __GLASGOW_HASKELL_PATCHLEVEL1__ < 2)
-import           Control.Monad.Except         (MonadError (throwError))
-#else
-import           Control.Monad.Except         (liftEither)
-#endif
-
+import           Control.Monad.Except         as X (MonadError(..), ExceptT(..), runExceptT)
 import           Control.Monad.Identity       as X
 
 import           Data.Char                    as X (chr, ord)
@@ -56,12 +51,14 @@ import qualified Data.ByteString.Lazy         as BS.L
 import           Text.ParserCombinators.ReadP as P
 import           Text.Read
 
--- GHC 8.4.1 shipped with a phony `mtl-2.2.2` and so we have to assume
--- pessimistically that on GHC 8.4.1 only, mtl-2.2.2 may be broken (even if it was reinstalled)
-#if !MIN_VERSION_mtl(2,2,2) || (__GLASGOW_HASKELL__ == 804 && __GLASGOW_HASKELL_PATCHLEVEL1__ < 2)
-liftEither :: MonadError e m => Either e a -> m a
-liftEither = either throwError return
-#endif
+-- GHC 8.4.1 shipped with a phony `mtl-2.2.2` and so we have no
+-- bulletproof way to know when `Control.Monad.Except` exports liftEither
+-- or not; after NixOS managed to break an otherwise effective workaround
+-- I'll just throwing my hands up in the air and will consider
+-- `Control.Monad.Except.liftEither` scorched earth for now.
+liftEither' :: MonadError e m => Either e a -> m a
+liftEither' = either throwError return
+
 
 #if !MIN_VERSION_base(4,6,0)
 readMaybe :: Read a => String -> Maybe a

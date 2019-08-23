@@ -15,7 +15,6 @@ module Data.YAML.Loader
     , NodeId
     ) where
 
-import           Control.Monad.Except
 import           Control.Monad.State
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map             as Map
@@ -81,7 +80,7 @@ decodeLoader Loader{..} bs0 = do
     returnNode pos (Just a) (Right node) = do
       nid <- getNewNid
       node0 <- lift' pos $ yAnchor nid node pos
-      node' <- liftEither node0
+      node' <- liftEither' node0
       modify $ \s0 -> s0 { sDict = Map.insert a (nid,node') (sDict s0) }
       return node'
 
@@ -95,7 +94,7 @@ decodeLoader Loader{..} bs0 = do
         modify $ \s0 -> s0 { sDict = Map.insert a (nid,n) (sDict s0) }
         n0 <- pn
         n1 <- lift' pos $ yAnchor nid n0 pos
-        n <-  liftEither n1
+        n <-  liftEither' n1
         return n
 
     exitAnchor :: Maybe YE.Anchor -> PT n m ()
@@ -115,19 +114,19 @@ decodeLoader Loader{..} bs0 = do
         YE.SequenceStart manc tag _ -> registerAnchor pos manc $ do
           ns <- manyUnless (== YE.SequenceEnd) goNode
           exitAnchor manc
-          liftEither =<< lift' pos (ySequence tag ns pos)
+          liftEither' =<< lift' pos (ySequence tag ns pos)
 
         YE.MappingStart manc tag _ -> registerAnchor pos manc $ do
           kvs <- manyUnless (== YE.MappingEnd) (liftM2 (,) goNode goNode)
           exitAnchor manc
-          liftEither =<< lift' pos (yMapping tag kvs pos)
+          liftEither' =<< lift' pos (yMapping tag kvs pos)
 
         YE.Alias a -> do
           d <- gets sDict
           cy <- gets sCycle
           case Map.lookup a d of
             Nothing -> throwError (pos, ("anchor not found: " ++ show a))
-            Just (nid,n') -> liftEither =<< lift' pos (yAlias nid (Set.member a cy) n' pos)
+            Just (nid,n') -> liftEither' =<< lift' pos (yAlias nid (Set.member a cy) n' pos)
 
         _ -> throwError (pos, "goNode: unexpected event")
 

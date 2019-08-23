@@ -24,7 +24,6 @@ module Data.YAML.Schema
     , tagNull, tagBool, tagStr, tagInt, tagFloat, tagSeq, tagMap
     ) where
 
-import           Control.Monad.Except
 import qualified Data.Char            as C
 import qualified Data.Map             as Map
 import qualified Data.Set             as Set
