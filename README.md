@@ -1,8 +1,9 @@
-# `HsYAML`: A Pure Haskell YAML 1.2 parsing and encoding library [![Hackage](https://img.shields.io/hackage/v/HsYAML.svg)](http://hackage.haskell.org/package/HsYAML) [![Build Status](https://travis-ci.org/haskell-hvr/HsYAML.svg?branch=0.2)](https://travis-ci.org/haskell-hvr/HsYAML)
+# `HsYAML`: A Pure Haskell YAML 1.2 processor  
+[![Hackage](https://img.shields.io/hackage/v/HsYAML.svg)](http://hackage.haskell.org/package/HsYAML) [![Build Status](https://travis-ci.org/haskell-hvr/HsYAML.svg?branch=0.2)](https://travis-ci.org/haskell-hvr/HsYAML)
 
 ## About  
 
-* HsYAML is a [YAML 1.2](https://yaml.org/spec/1.2/spec.html) parser and encoder implementation for Haskell.  
+* HsYAML is a [YAML 1.2](https://yaml.org/spec/1.2/spec.html) processor implementation for Haskell.  
 * It is in strict compliance with [YAML 1.2](https://yaml.org/spec/1.2/spec.html) grammer rules.
 * HsYAML is tested using [YAML-Test-Suite](https://github.com/yaml/yaml-test-suite) and some other tests which can be found [here](https://github.com/haskell-hvr/HsYAML/tree/0.2/tests). 
 * See HsYAML's performance on [YAML-Test-Matrix](https://matrix.yaml.io) which combines all tests from [YAML-Test-Suite](https://github.com/yaml/yaml-test-suite) and performance of all processors from [yaml-editor](https://github.com/yaml/yaml-editor).
@@ -31,4 +32,4 @@ The library is developed and maintained by [Herbert Valerio Riedel](https://gith
 
 # License
 
-This project is licensed under the [LICENSE.GPLv2](LICENSE.GPLv2) and [LICENSE.GPLv3](LICENSE.GPLv3)
+This project is licensed under X-SPDX-License-Identifier: [GPL-2.0-or-later](https://spdx.org/licenses/GPL-2.0-or-later.html)

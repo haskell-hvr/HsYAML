@@ -564,8 +564,8 @@ decode1Strict text = do
 -- Suppose we want to 'encode' a Haskell-data type Person
 --
 -- @
--- data Person = Person {
---       name :: Text
+-- data Person = Person 
+--     { name :: Text
 --     , age  :: Int
 --     } deriving Show
 -- @
