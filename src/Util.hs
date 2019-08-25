@@ -62,13 +62,13 @@ liftEither' = either throwError return
 
 #if !MIN_VERSION_base(4,6,0)
 
--- | Parse a string using the Read instance. Succeeds if there is
+-- | Parse a string using the 'Read' instance. Succeeds if there is
 -- exactly one valid result.
 readMaybe :: Read a => String -> Maybe a
 readMaybe = either (const Nothing) id . readEither
 
--- | Parse a string using the Read instance. Succeeds if there is
--- exactly one valid result. A Left value indicates a parse error.
+-- | Parse a string using the 'Read' instance. Succeeds if there is
+-- exactly one valid result. A 'Left' value indicates a parse error.
 readEither :: Read a => String -> Either String a
 readEither s = case [ x | (x,"") <- readPrec_to_S read' minPrec s ] of
                  [x] -> Right x
@@ -80,8 +80,8 @@ readEither s = case [ x | (x,"") <- readPrec_to_S read' minPrec s ] of
              return x
 #endif
 
--- | Succeeds if the Integral value is in the bounds of the given Data type.
--- A Nothing indicates that the value is outside the bounds.
+-- | Succeeds if the 'Integral' value is in the bounds of the given Data type.
+-- 'Nothing' indicates that the value is outside the bounds.
 fromIntegerMaybe :: forall n . (Integral n, Bounded n) => Integer -> Maybe n
 fromIntegerMaybe j
   | l <= j, j <= u  = Just (fromInteger j)
@@ -100,15 +100,15 @@ mapFromListNoDupes = go mempty
                             Nothing -> Left (k,v)
                             Just m' -> go m' rest
 
--- | A convience wrapper over Data.Map.insertLookupWithKey
+-- | A convience wrapper over 'Data.Map.insertLookupWithKey'
 mapInsertNoDupe :: Ord k => k -> a -> Map k a -> Maybe (Map k a)
 mapInsertNoDupe kx x t = case Map.insertLookupWithKey (\_ a _ -> a) kx x t of
                            (Nothing, m) -> Just m
                            (Just _, _)  -> Nothing
 
 
--- | Equivalent to the fuction Data.ByteString.toStrict.
--- O(n) Convert a lazy ByteString into a strict ByteString.
+-- | Equivalent to the function 'Data.ByteString.toStrict'.
+-- O(n) Convert a lazy 'BS.L.ByteString' into a strict 'BS.ByteString'.
 {-# INLINE bsToStrict #-}
 bsToStrict :: BS.L.ByteString -> BS.ByteString
 #if MIN_VERSION_bytestring(0,10,0)

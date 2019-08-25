@@ -2,7 +2,7 @@ cabal-version:       1.14
 name:                HsYAML
 version:             0.2.0.0
 
-synopsis:            Pure Haskell YAML 1.2 parsing and encoding library
+synopsis:            Pure Haskell YAML 1.2 processor
 homepage:            https://github.com/hvr/HsYAML
 bug-reports:         https://github.com/hvr/HsYAML/issues
 license:             GPL-2
@@ -17,13 +17,14 @@ build-type:          Simple
 tested-with:         GHC==8.6.1, GHC==8.4.3, GHC==8.4.1, GHC==8.2.2, GHC==8.0.2, GHC==7.10.3, GHC==7.8.4, GHC==7.6.3, GHC==7.4.2
 
 description:
-  @HsYAML@ is a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) processor.
+  @HsYAML@ is a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) processor, i.e. a library for parsing and serializing YAML documents.
+
   .
   Features of @HsYAML@ include:
   .
    * Pure Haskell implementation with small dependency footprint and emphasis on strict compliance with the [YAML 1.2 specification](http://yaml.org/spec/1.2/spec.html).
    * Direct decoding to native Haskell types via (@aeson@-inspired) typeclass-based API (see "Data.YAML").
-   * Allows round-tripping while preserving ordering, anchors, and comments at Event-level
+   * Allows round-tripping while preserving ordering, anchors, and comments at Event-level.
    * Support for constructing custom YAML node graph representation (including support for cyclic YAML data structures).
    * Support for the standard (untyped) /Failsafe/, (strict) /JSON/, and (flexible) /Core/ \"schemas\" providing implicit typing rules as defined in the YAML 1.2 specification (including support for user-defined custom schemas).
    * Support for emitting YAML using /Failsafe/, (strict) /JSON/, and (flexible) /Core/ \"schemas\" (including support for user-defined custom encoding schemas).

@@ -35,7 +35,7 @@ module Data.YAML
     , parseEither
     , typeMismatch
 
-      -- ** Accessors for YAML Mappings
+      -- ** Accessors for YAML 'Mapping's
     , Mapping
     , (.:), (.:?), (.:!), (.!=)
 
@@ -663,7 +663,7 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
 --
 -- Each YAML Node produces exactly one YAML Document.
 --
--- Here is example of encoding a list of strings to produce a list of YAML Documents
+-- Here is an example of encoding a list of strings to produce a list of YAML Documents
 --
 -- >>> encode (["Document 1", "Document 2"] :: [Text]) 
 -- "Document 1\n...\nDocument 2\n"
@@ -673,13 +673,13 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
 -- >>> encode ([["Document 1", "Document 2"]] :: [[Text]])
 -- "- Document 1\n- Document 2\n"
 -- 
--- Alternatively, you might want to use 'encode1'
+-- Alternatively, if you only need a single YAML document in a YAML stream you might want to use the convenience function 'encode1'.
 --
 -- @since 0.2.0
 encode :: ToYAML v => [v] -> BS.L.ByteString
 encode vList = encodeNode $ map (Doc . toYAML) vList
 
--- | Convenience wrapper over 'encode' expecting exactly one YAML Node. 
+-- | Convenience wrapper over 'encode' taking exactly one YAML Node. 
 -- Hence it will always output exactly one YAML Document
 --
 -- Here is example of encoding a list of strings to produce exactly one of YAML Documents
@@ -697,7 +697,7 @@ encode1 a = encode [a]
 encodeStrict :: ToYAML v => [v] -> BS.ByteString
 encodeStrict = bsToStrict . encode
 
--- | Like 'encode1' but outputs 'BS.ByteString'
+-- | Like 'encode1' but outputs a strict 'BS.ByteString'
 --
 -- @since 0.2.0
 encode1Strict :: ToYAML v => v -> BS.ByteString
