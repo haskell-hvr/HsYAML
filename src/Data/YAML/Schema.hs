@@ -344,7 +344,7 @@ coreDecodeFloat t
       , ("-.INF", (-1/0))
       ]
 
-
+-- | Some tags specified in YAML 1.2
 tagNull, tagBool, tagStr, tagInt, tagFloat, tagSeq, tagMap, tagBang :: Tag
 tagNull  = mkTag "tag:yaml.org,2002:null"
 tagStr   = mkTag "tag:yaml.org,2002:str"

@@ -3,7 +3,10 @@
 {-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-
+-- |
+-- Copyright: © Herbert Valerio Riedel 2015-2018
+-- SPDX-License-Identifier: GPL-2.0-or-later
+--
 module Data.YAML.Dumper
     ( encodeNode
     , encodeNode'
@@ -18,7 +21,7 @@ import qualified Data.ByteString.Lazy     as BS.L
 import qualified Data.Map                 as Map
 import qualified Data.Text                as T
 
-
+-- internal
 type EvList = [Either String Event]
 type Node2EvList = [Node ()] -> EvList
 

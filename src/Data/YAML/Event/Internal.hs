@@ -38,6 +38,7 @@ import           Util
 -- document ::= 'DocumentStart' node 'DocumentEnd'
 -- node     ::= 'Alias'
 --            | 'Scalar'
+--            | 'Comment'
 --            | sequence
 --            | mapping
 -- sequence ::= 'SequenceStart' node* 'SequenceEnd'

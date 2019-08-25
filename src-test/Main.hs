@@ -175,8 +175,7 @@ cmdYaml2Event = do
     Left (ofs,msg) -> do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
-    Right event -> do
-      print (eEvent event)
+    Right event -> print (eEvent event)
       -- hPutStrLn stdout (ev2str True (eEvent event))
       -- hFlush stdout
 
