@@ -13,16 +13,16 @@ import Test.Tasty.QuickCheck (testProperty,Arbitrary(..))
 outputStr :: ToYAML a => a -> BS.L.ByteString
 outputStr a = BS.L.init (encode1 a)  -- TODO: remove trailing newline from Writer.hs
 
-encodeInt :: Int -> Bool
-encodeInt i = BS.L.pack (show i) == outputStr i
+roundTripInt :: Int -> Bool
+roundTripInt i = BS.L.pack (show i) == outputStr i
 
-encodeBool :: Bool -> Bool
-encodeBool b
+roundTripBool :: Bool -> Bool
+roundTripBool b
   | b = "true"  == outputStr b
   | otherwise = "false" == outputStr b
 
-encodeDouble :: Double -> Double -> Bool
-encodeDouble num denom
+roundTripDouble :: Double -> Double -> Bool
+roundTripDouble num denom
     | d /= d      = ".nan"  == outputStr d
     | d == (1/0)  = ".inf"  == outputStr d
     | d == (-1/0) = "-.inf" == outputStr d
@@ -51,9 +51,9 @@ main = defaultMain (testGroup "tests" tests)
 tests :: [TestTree]
 tests = 
   [ testGroup "encode" 
-    [ testProperty "encodeInt" encodeInt
-    , testProperty "encodeBool" encodeBool
-    , testProperty "encodeDouble" encodeDouble
+    [ testProperty "encodeInt" roundTripInt
+    , testProperty "encodeBool" roundTripBool
+    , testProperty "encodeDouble" roundTripDouble
     ]
   , testGroup "roundTrip" 
     [ testProperty "Bool"    $ roundTripEq True
