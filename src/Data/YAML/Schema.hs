@@ -22,6 +22,9 @@ module Data.YAML.Schema
     , coreSchemaEncoder
 
     , tagNull, tagBool, tagStr, tagInt, tagFloat, tagSeq, tagMap
+
+    , isPlainChar , isAmbiguous, defaultSchemaEncoder, setScalarStyle
+    , encodeDouble, encodeBool, encodeInt
     ) where
 
 import qualified Data.Char            as C
@@ -393,7 +396,7 @@ failsafeSchemaEncoder = SchemaEncoder{..}
     schemaEncoderMapping  = mappingTag
     schemaEncoderSequence = seqTag
 
--- | Strict JSON schema encoder inspired by
+-- | Strict JSON schema encoder as specified
 -- in [YAML 1.2 / 10.2.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2804356)
 --
 -- @since 0.2.0
@@ -403,16 +406,16 @@ jsonSchemaEncoder = SchemaEncoder{..}
 
     schemaEncoderScalar s = case s of
       SNull         -> Right (untagged, Plain, "null") 
-      SBool  bool   -> Right (untagged, Plain, (encodeBool bool))
-      SFloat double -> Right (untagged, Plain, (encodeDouble double))
-      SInt   int    -> Right (untagged, Plain, (T.pack . show $ int))
+      SBool  bool   -> Right (untagged, Plain, encodeBool bool)
+      SFloat double -> Right (untagged, Plain, encodeDouble double)
+      SInt   int    -> Right (untagged, Plain, encodeInt int)
       SStr   text   -> jsonEncodeStr text
       SUnknown _ _  -> Left  "SUnknown scalar type not supported in jsonSchemaEncoder"
 
     schemaEncoderMapping  = mappingTag
     schemaEncoderSequence = seqTag
 
--- | Core schema encoder inspired by
+-- | Core schema encoder as specified
 -- in [YAML 1.2 / 10.3.2. Tag Resolution](http://yaml.org/spec/1.2/spec.html#id2805071)
 --
 -- @since 0.2.0
@@ -422,24 +425,37 @@ coreSchemaEncoder = SchemaEncoder{..}
 
     schemaEncoderScalar s = case s of
       SNull         -> Right (untagged, Plain, "null")
-      SBool  bool   -> Right (untagged, Plain, (encodeBool bool))
-      SFloat double -> Right (untagged, Plain, (encodeDouble double))
-      SInt   int    -> Right (untagged, Plain, (T.pack . show $ int))
+      SBool  bool   -> Right (untagged, Plain, encodeBool bool)
+      SFloat double -> Right (untagged, Plain, encodeDouble double)
+      SInt   int    -> Right (untagged, Plain, encodeInt int)
       SStr   text   -> coreEncodeStr text
       SUnknown t v  -> Right (t, DoubleQuoted, v)
 
     schemaEncoderMapping  = mappingTag
     schemaEncoderSequence = seqTag
 
+-- | Encode Boolean
+--
+-- @since 0.2.0
 encodeBool :: Bool -> T.Text
 encodeBool b = if b then "true" else "false"
 
+-- | Encode Double
+--
+-- @since 0.2.0
 encodeDouble :: Double -> T.Text
 encodeDouble d
   | d /= d      = ".nan"
   | d == (1/0)  = ".inf"
   | d == (-1/0) = "-.inf"
   | otherwise   = T.pack . show $ d
+
+-- | Encode Integer
+--
+-- @since 0.2.0
+encodeInt :: Integer -> T.Text
+encodeInt = T.pack . show
+
 
 failEncodeStr :: T.Text -> Either String (Tag, ScalarStyle, T.Text)
 failEncodeStr t
@@ -466,12 +482,57 @@ coreEncodeStr t
   | isAmbiguous coreSchemaResolver t = Right (untagged, DoubleQuoted, t)
   | otherwise                        = Right (untagged, Plain, t)
 
--- | <https://yaml.org/spec/1.2/spec.html#c-indicator Indicator Characters>
+-- | These are some characters which can be used in 'Plain' 'Scalar's safely without any quotes (see <https://yaml.org/spec/1.2/spec.html#c-indicator Indicator Characters>). 
+--
+-- __NOTE__: This does not mean that other characters (like @"\\n"@ and other special characters like @"-?:,[]{}#&*!,>%\@`\"\'"@) cannot be used in 'Plain' 'Scalar's.
+--
+-- @since 0.2.0
 isPlainChar :: Char -> Bool
-isPlainChar c = C.isAlphaNum c || c `elem` (" ~$^+=</;.\\" :: String)  -- not $ c `elem` "\n-?:,[]{}#&*!,>%@`\\'\""
+isPlainChar c = C.isAlphaNum c || c `elem` (" ~$^+=</;._\\" :: String)  -- not $ c `elem` "\n-?:,[]{}#&*!,>%@`\\'\""
 
+-- | Returns True if the string can be decoded by the given 'SchemaResolver'
+-- into a 'Scalar' which is not a of type 'SStr'. 
+--
+-- >>> isAmbiguous coreSchemaResolver "true"
+-- True
+--
+-- >>> isAmbiguous failSchemaResolver "true"
+-- False
+--
+-- @since 0.2.0
 isAmbiguous :: SchemaResolver -> T.Text -> Bool
 isAmbiguous SchemaResolver{..} t = case schemaResolverScalar untagged Plain t of
   Left err -> error err
   Right (SStr _ ) -> False
   Right _ -> True
+
+-- | According to YAML 1.2 'coreSchemaEncoder' is the default 'SchemaEncoder'
+--
+-- By default, 'Scalar's are encoded as follows:
+--
+-- * String which are made of Plain Characters (see 'isPlainChar'), unambiguous (see 'isAmbiguous') and do not contain any leading/trailing spaces are encoded as 'Plain' 'Scalar'.
+--
+-- * Rest of the strings are encoded in DoubleQuotes
+--
+-- * Booleans are encoded using 'encodeBool'
+--
+-- * Double values are encoded using 'encodeDouble'
+--
+-- * Integral values are encoded using 'encodeInt'
+--
+-- @since 0.2.0
+defaultSchemaEncoder :: SchemaEncoder
+defaultSchemaEncoder = coreSchemaEncoder
+
+-- | Set the 'Scalar' style in the encoded YAML. This is a function that decides
+-- for each 'Scalar' the type of YAML string to output.
+--
+-- __WARNING__: You must ensure that special strings (like @"true"@\/@"false"@\/@"null"@\/@"1234"@) are not encoded with the 'Plain' style, because
+-- then they will be decoded as boolean, null or numeric values. You can use 'isAmbiguous' to detect them.
+--
+-- __NOTE__: For different 'SchemaResolver's, different strings are ambiguous. For example, @"true"@ is not ambiguous for 'failsafeSchemaResolver'.
+--
+-- @since 0.2.0
+setScalarStyle :: (Scalar -> Either String (Tag, ScalarStyle, T.Text)) -> SchemaEncoder -> SchemaEncoder
+setScalarStyle customScalarEncoder encoder = encoder { schemaEncoderScalar = customScalarEncoder }
+

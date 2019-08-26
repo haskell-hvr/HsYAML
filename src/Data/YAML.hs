@@ -81,6 +81,15 @@ module Data.YAML
     , jsonSchemaEncoder
     , coreSchemaEncoder
 
+    -- * Custom Schema encoding
+    , defaultSchemaEncoder
+    , setScalarStyle
+    , isPlainChar
+    , isAmbiguous
+    , encodeDouble
+    , encodeBool
+    , encodeInt
+    
       -- * Generalised AST construction
     , decodeLoader
     , Loader(..)
