@@ -6,6 +6,7 @@
 --
 module Data.YAML.Internal
     ( Node(..)
+    , nodeLoc
     , NodeId
     , Doc(..)
     , Mapping
@@ -34,6 +35,12 @@ data Node loc
   | Sequence !loc !Tag [Node loc]
   | Anchor   !loc !NodeId !(Node loc)
   deriving (Show)
+
+nodeLoc :: Node loc -> loc
+nodeLoc (Scalar pos _)     = pos
+nodeLoc (Anchor pos _ _)   = pos
+nodeLoc (Mapping pos _ _)  = pos
+nodeLoc (Sequence pos _ _) = pos
 
 instance Functor Node where
   fmap f node = case node of

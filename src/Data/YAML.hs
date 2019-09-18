@@ -88,6 +88,7 @@ module Data.YAML
       -- * Generalised AST construction
     , decodeLoader
     , Loader(..)
+    , LoaderT
     , NodeId
 
     ) where
@@ -240,21 +241,28 @@ decodeNode' :: SchemaResolver  -- ^ YAML Schema resolver to use
 decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
   = map Doc <$> runIdentity (decodeLoader failsafeLoader bs0)
   where
-    failsafeLoader = Loader { yScalar   = \t s v pos-> pure $ fmap (Scalar pos) (schemaResolverScalar t s v)
-                            , ySequence = \t vs pos -> pure $ schemaResolverSequence t >>= \t' -> Right (Sequence pos t' vs )
-                            , yMapping  = \t kvs pos-> pure $ schemaResolverMapping  t >>= \t' -> (Mapping pos t' <$> mkMap kvs)
+    failsafeLoader = Loader { yScalar   = \t s v pos-> pure $ case schemaResolverScalar t s v of
+                                                                Left  e  -> Left (pos,e)
+                                                                Right v' -> Right (Scalar pos v')
+                            , ySequence = \t vs pos -> pure $ case schemaResolverSequence t of
+                                                                Left  e  -> Left (pos,e)
+                                                                Right t' -> Right (Sequence pos t' vs)
+                            , yMapping  = \t kvs pos-> pure $ case schemaResolverMapping  t of
+                                                                Left  e  -> Left (pos,e)
+                                                                Right t' -> Mapping pos t' <$> mkMap kvs
                             , yAlias    = if allowCycles
                                           then \_ _ n _-> pure $ Right n
-                                          else \_ c n _-> pure $ if c then Left "cycle detected" else Right n
+                                          else \_ c n pos -> pure $ if c then Left (pos,"cycle detected") else Right n
                             , yAnchor   = if anchorNodes
                                           then \j n pos  -> pure $ Right (Anchor pos j n)
                                           else \_ n _  -> pure $ Right n
                             }
 
+    mkMap :: [(Node Pos, Node Pos)] -> Either (Pos, String) (Map (Node Pos) (Node Pos))
     mkMap kvs
       | schemaResolverMappingDuplicates = Right $! Map.fromList kvs
       | otherwise = case mapFromListNoDupes kvs of
-          Left (k,_) -> Left ("Duplicate key in mapping: " ++ show k)
+          Left (k,_) -> Left (nodeLoc k,"Duplicate key in mapping: " ++ show k)
           Right m    -> Right m
 
 ----------------------------------------------------------------------------
@@ -325,7 +333,7 @@ parseEither = unP
 typeMismatch :: String   -- ^ descriptive name of expected data
              -> Node Pos     -- ^ actual node
              -> Parser a
-typeMismatch expected node = failAtPos position ("expected " ++ expected ++ " instead of " ++ got)
+typeMismatch expected node = failAtPos (nodeLoc node) ("expected " ++ expected ++ " instead of " ++ got)
   where
     got = case node of
             Scalar _ (SBool _)             -> "!!bool"
@@ -343,11 +351,6 @@ typeMismatch expected node = failAtPos position ("expected " ++ expected ++ " in
     tagged t0 = case tagToText t0 of
                Nothing -> "non-specifically ? tagged (i.e. unresolved) "
                Just t  -> T.unpack t ++ " tagged"
-    position = case node of
-              Scalar pos _     -> pos
-              Anchor pos _ _   -> pos
-              Mapping pos _ _  -> pos
-              Sequence pos _ _ -> pos
 
 -- | A type into which YAML nodes can be converted/deserialized
 class FromYAML a where

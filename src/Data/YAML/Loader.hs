@@ -12,6 +12,7 @@
 module Data.YAML.Loader
     ( decodeLoader
     , Loader(..)
+    , LoaderT
     , NodeId
     ) where
 
@@ -34,12 +35,19 @@ type NodeId = Word
 -- @since 0.2.0
 --
 data Loader m n = Loader
-  { yScalar   :: Tag -> YE.ScalarStyle -> Text -> YE.Pos -> m (Either String n)
-  , ySequence :: Tag -> [n]                    -> YE.Pos -> m (Either String n)
-  , yMapping  :: Tag -> [(n,n)]                -> YE.Pos -> m (Either String n)
-  , yAlias    :: NodeId -> Bool -> n           -> YE.Pos -> m (Either String n)
-  , yAnchor   :: NodeId -> n                   -> YE.Pos -> m (Either String n)
+  { yScalar   :: Tag -> YE.ScalarStyle -> Text -> LoaderT m n
+  , ySequence :: Tag -> [n]                    -> LoaderT m n
+  , yMapping  :: Tag -> [(n,n)]                -> LoaderT m n
+  , yAlias    :: NodeId -> Bool -> n           -> LoaderT m n
+  , yAnchor   :: NodeId -> n                   -> LoaderT m n
   }
+
+-- | Helper type for 'Loader'
+--
+-- @since 0.2.0
+type LoaderT m n = YE.Pos -> m (Either (YE.Pos,String) n)
+
+-- TODO: newtype LoaderT m n = LoaderT { runLoaderT :: YE.Pos -> m (Either String n) }
 
 -- | Generalised document tree/graph construction
 --
@@ -83,8 +91,7 @@ decodeLoader Loader{..} bs0 = do
     returnNode _ Nothing (Right node) = return node
     returnNode pos (Just a) (Right node) = do
       nid <- getNewNid
-      node0 <- lift' pos $ yAnchor nid node pos
-      node' <- liftEither' node0
+      node' <- liftEither' =<< lift (yAnchor nid node pos)
       modify $ \s0 -> s0 { sDict = Map.insert a (nid,node') (sDict s0) }
       return node'
 
@@ -97,8 +104,7 @@ decodeLoader Loader{..} bs0 = do
       mdo
         modify $ \s0 -> s0 { sDict = Map.insert a (nid,n) (sDict s0) }
         n0 <- pn
-        n1 <- lift' pos $ yAnchor nid n0 pos
-        n <-  liftEither' n1
+        n  <- liftEither' =<< lift (yAnchor nid n0 pos)
         return n
 
     exitAnchor :: Maybe YE.Anchor -> PT n m ()
@@ -112,35 +118,27 @@ decodeLoader Loader{..} bs0 = do
       case YE.eEvent n of
         YE.Scalar manc tag sty val -> do
           exitAnchor manc
-          n' <- lift' pos $ yScalar tag sty val pos
+          n' <- lift (yScalar tag sty val pos)
           returnNode pos manc $! n'
 
         YE.SequenceStart manc tag _ -> registerAnchor pos manc $ do
           ns <- manyUnless (== YE.SequenceEnd) goNode
           exitAnchor manc
-          liftEither' =<< lift' pos (ySequence tag ns pos)
+          liftEither' =<< lift (ySequence tag ns pos)
 
         YE.MappingStart manc tag _ -> registerAnchor pos manc $ do
           kvs <- manyUnless (== YE.MappingEnd) (liftM2 (,) goNode goNode)
           exitAnchor manc
-          liftEither' =<< lift' pos (yMapping tag kvs pos)
+          liftEither' =<< lift (yMapping tag kvs pos)
 
         YE.Alias a -> do
           d <- gets sDict
           cy <- gets sCycle
           case Map.lookup a d of
             Nothing -> throwError (pos, ("anchor not found: " ++ show a))
-            Just (nid,n') -> liftEither' =<< lift' pos (yAlias nid (Set.member a cy) n' pos)
+            Just (nid,n') -> liftEither' =<< lift (yAlias nid (Set.member a cy) n' pos)
 
         _ -> throwError (pos, "goNode: unexpected event")
-
-    lift' pos a = do
-      n <- (lift a)
-      case n of
-        Left err -> return $ Left (pos, err)
-        Right x -> return $ Right x
-
-
 
 ----------------------------------------------------------------------------
 -- small parser framework
