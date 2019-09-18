@@ -32,6 +32,7 @@ import qualified Data.Text.Encoding         as T
 import qualified Data.Text.IO               as T
 
 import           Data.YAML                  as Y
+import           Data.YAML.Schema           as Y
 import           Data.YAML.Event            as YE
 import qualified Data.YAML.Token            as YT
 
