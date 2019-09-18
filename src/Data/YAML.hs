@@ -70,26 +70,21 @@ module Data.YAML
     , Pos(..)
 
       -- * YAML 1.2 Schema resolvers
-    , SchemaResolver(..)
+      --
+      -- | See also "Data.YAML.Schema"
+    , SchemaResolver
     , failsafeSchemaResolver
     , jsonSchemaResolver
     , coreSchemaResolver
 
       -- * YAML 1.2 Schema encoders
-    , SchemaEncoder(..)
+      --
+      -- | See also "Data.YAML.Schema"
+    , SchemaEncoder
     , failsafeSchemaEncoder
     , jsonSchemaEncoder
     , coreSchemaEncoder
 
-    -- * Custom Schema encoding
-    , defaultSchemaEncoder
-    , setScalarStyle
-    , isPlainChar
-    , isAmbiguous
-    , encodeDouble
-    , encodeBool
-    , encodeInt
-    
       -- * Generalised AST construction
     , decodeLoader
     , Loader(..)

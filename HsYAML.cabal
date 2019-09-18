@@ -47,6 +47,7 @@ flag exe
 library
   hs-source-dirs:      src
   exposed-modules:     Data.YAML
+                     , Data.YAML.Schema
                      , Data.YAML.Event
                      , Data.YAML.Token
   other-modules:       Data.YAML.Loader
