@@ -14,7 +14,7 @@ module Data.YAML.Internal
 import qualified Data.Map              as Map
 
 import           Data.YAML.Event       (Tag)
-import           Data.YAML.Schema      (Scalar(..))
+import           Data.YAML.Schema.Internal (Scalar(..))
 import           Data.YAML.Loader      (NodeId)
 
 import           Util

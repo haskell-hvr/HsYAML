@@ -9,7 +9,7 @@
 --
 -- YAML 1.2 Schema resolvers and encoders
 --
-module Data.YAML.Schema
+module Data.YAML.Schema.Internal
     ( SchemaResolver(..)
     , failsafeSchemaResolver
     , jsonSchemaResolver

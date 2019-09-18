@@ -108,7 +108,7 @@ import           Data.YAML.Dumper
 import           Data.YAML.Event      (Pos (..), isUntagged, tagToText)
 import           Data.YAML.Internal
 import           Data.YAML.Loader
-import           Data.YAML.Schema
+import           Data.YAML.Schema.Internal
 
 import           Util
 

@@ -54,7 +54,7 @@ library
                      , Data.YAML.Internal
                      , Data.YAML.Event.Internal
                      , Data.YAML.Event.Writer
-                     , Data.YAML.Schema
+                     , Data.YAML.Schema.Internal
                      , Data.YAML.Token.Encoding
                      , Util
                      , Data.DList

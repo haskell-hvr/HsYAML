@@ -14,7 +14,7 @@ module Data.YAML.Dumper
 
 import           Data.YAML.Event.Internal as YE
 import           Data.YAML.Internal       as YI
-import           Data.YAML.Schema         as YS
+import           Data.YAML.Schema.Internal as YS
 import           Data.YAML.Event.Writer   (writeEvents)
 
 import qualified Data.ByteString.Lazy     as BS.L
