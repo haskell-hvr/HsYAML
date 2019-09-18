@@ -26,6 +26,8 @@ newtype Doc n = Doc { getDoc :: n } deriving (Eq,Ord,Show)
 type Mapping loc = Map (Node loc) (Node loc)
 
 -- | YAML Document node
+--
+-- @since 0.2.0
 data Node loc
   = Scalar   !loc !Scalar
   | Mapping  !loc !Tag (Mapping loc)

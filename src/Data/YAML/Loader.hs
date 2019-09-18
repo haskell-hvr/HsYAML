@@ -31,6 +31,8 @@ type NodeId = Word
 
 -- | Structure defining how to construct a document tree/graph
 --
+-- @since 0.2.0
+--
 data Loader m n = Loader
   { yScalar   :: Tag -> YE.ScalarStyle -> Text -> YE.Pos -> m (Either String n)
   , ySequence :: Tag -> [n]                    -> YE.Pos -> m (Either String n)
@@ -44,6 +46,8 @@ data Loader m n = Loader
 -- This doesn't yet perform any tag resolution (thus all scalars are
 -- represented as 'Text' values). See also 'decodeNode' for a more
 -- convenient interface.
+--
+-- @since 0.2.0
 {-# INLINEABLE decodeLoader #-}
 decodeLoader :: forall n m . MonadFix m => Loader m n -> BS.L.ByteString -> m (Either (YE.Pos, String) [n])
 decodeLoader Loader{..} bs0 = do

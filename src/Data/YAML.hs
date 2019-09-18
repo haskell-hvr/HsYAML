@@ -227,11 +227,15 @@ fakePos = Pos { posByteOffset = -1 , posCharOffset = -1  , posLine = 1 , posColu
 -- * Don't create 'Anchor' nodes
 -- * Disallow cyclic anchor references
 --
+-- @since 0.2.0
+--
 decodeNode :: BS.L.ByteString -> Either (Pos, String) [Doc (Node Pos)]
 decodeNode = decodeNode' coreSchemaResolver False False
 
 
 -- | Customizable variant of 'decodeNode'
+--
+-- @since 0.2.0
 --
 decodeNode' :: SchemaResolver  -- ^ YAML Schema resolver to use
             -> Bool            -- ^ Whether to emit anchor nodes
@@ -526,6 +530,8 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 -- decoding from YAML streams using the UTF-8, UTF-16 (LE or BE), or
 -- UTF-32 (LE or BE) encoding (which is auto-detected).
 --
+-- @since 0.2.0
+--
 decode :: FromYAML v => BS.L.ByteString -> Either (Pos, String) [v]
 decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
@@ -540,7 +546,8 @@ decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 -- >>> decode1 "# Just a comment" :: Either String Text
 -- Left "empty YAML stream"
 --
--- @since 0.1.2.0
+-- @since 0.2.0
+--
 decode1 :: FromYAML v => BS.L.ByteString -> Either (Pos, String) v
 decode1 text = do
   vs <- decode text
@@ -551,13 +558,15 @@ decode1 text = do
 
 -- | Like 'decode' but takes a strict 'BS.ByteString'
 --
--- @since 0.1.1.0
+-- @since 0.2.0
+--
 decodeStrict :: FromYAML v => BS.ByteString -> Either (Pos, String) [v]
 decodeStrict = decode . BS.L.fromChunks . (:[])
 
 -- | Like 'decode1' but takes a strict 'BS.ByteString'
 --
--- @since 0.1.2.0
+-- @since 0.2.0
+--
 decode1Strict :: FromYAML v => BS.ByteString -> Either (Pos, String) v
 decode1Strict text = do
   vs <- decodeStrict text
