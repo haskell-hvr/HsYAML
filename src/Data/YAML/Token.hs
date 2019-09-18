@@ -1432,7 +1432,7 @@ ns_plain_safe c   {- 127 -} = case c of
                                    BlockKey -> ns_plain_safe_out
                                    FlowKey  -> ns_plain_safe_in
                                    _        -> error "unexpected node style pattern in ns_plain_safe"
-                                   
+
 ns_plain_safe_out {- 128 -} = ns_char
 ns_plain_safe_in  {- 129 -} = ns_char - c_flow_indicator
 ns_plain_char c   {- 130 -} = ns_plain_safe c - ':' - '#'
@@ -1690,7 +1690,7 @@ ns_l_block_map_entry n {- 188 -} = wrapTokens BeginPair EndPair
                                  / ns_l_block_map_implicit_entry n
 c_l_block_map_explicit_entry n {- 189 -} = c_l_block_map_explicit_key n
                                          & ( l_block_map_explicit_value n
-                                         / e_node )                                         
+                                         / e_node )
 c_l_block_map_explicit_key n   {- 190 -} = c_mapping_key & ( ns_char >!) ! DeNode & s_l__block_indented n BlockOut
 l_block_map_explicit_value n   {- 191 -} = s_indent n & c_mapping_value & s_l__block_indented n BlockOut
 

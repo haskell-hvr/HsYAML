@@ -93,15 +93,15 @@ module Data.YAML
 
     ) where
 
-import qualified Control.Monad.Fail   as Fail
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as BS.L
-import qualified Data.Map             as Map
-import           Data.Maybe           (listToMaybe)
-import qualified Data.Text            as T
+import qualified Control.Monad.Fail        as Fail
+import qualified Data.ByteString           as BS
+import qualified Data.ByteString.Lazy      as BS.L
+import qualified Data.Map                  as Map
+import           Data.Maybe                (listToMaybe)
+import qualified Data.Text                 as T
 
 import           Data.YAML.Dumper
-import           Data.YAML.Event      (Pos (..), isUntagged, tagToText)
+import           Data.YAML.Event           (Pos (..), isUntagged, tagToText)
 import           Data.YAML.Internal
 import           Data.YAML.Loader
 import           Data.YAML.Schema.Internal
@@ -115,9 +115,9 @@ import           Util
 -- <<http://yaml.org/spec/1.2/overview2.png>>
 --
 -- $start
--- 
--- This section contains basic information on the different ways to work with YAML data using this library. 
--- 
+--
+-- This section contains basic information on the different ways to work with YAML data using this library.
+--
 -- $loading
 --
 -- We address the process of loading data from a YAML document as decoding.
@@ -176,7 +176,7 @@ import           Util
 -- >>> decode1 "Name: Vijay" :: Either String (Node Pos)
 -- Right (Mapping (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) Just "tag:yaml.org,2002:map" (fromList [(Scalar (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) (SStr "Name"),Scalar (Pos {posByteOffset = 4, posCharOffset = 4, posLine = 1, posColumn = 4}) (SStr "Vijay"))]))
 --
--- The type parameter 'Pos' is used to indicate the position of each YAML 'Node' in the document. 
+-- The type parameter 'Pos' is used to indicate the position of each YAML 'Node' in the document.
 -- So using the 'Node' type we can easily decode any YAML document.
 
 
@@ -578,11 +578,11 @@ decode1Strict text = do
 -- $dumping
 --
 -- We address the process of dumping information from a Haskell-data type(s) to a YAML document(s) as encoding.
--- 
+--
 -- Suppose we want to 'encode' a Haskell-data type Person
 --
 -- @
--- data Person = Person 
+-- data Person = Person
 --     { name :: Text
 --     , age  :: Int
 --     } deriving Show
@@ -615,7 +615,7 @@ decode1Strict text = do
 -- @since 0.2.0.0
 class ToYAML a where
   -- | Convert a Haskell Data-type to a YAML Node data type.
-  toYAML :: a -> Node () 
+  toYAML :: a -> Node ()
 
 instance Loc loc => ToYAML (Node loc) where
   toYAML = toUnit
@@ -683,21 +683,21 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
 --
 -- Here is an example of encoding a list of strings to produce a list of YAML Documents
 --
--- >>> encode (["Document 1", "Document 2"] :: [Text]) 
+-- >>> encode (["Document 1", "Document 2"] :: [Text])
 -- "Document 1\n...\nDocument 2\n"
 --
 -- If we treat the above list of strings as a single sequence then we will produce a single YAML Document having a single sequence.
 --
 -- >>> encode ([["Document 1", "Document 2"]] :: [[Text]])
 -- "- Document 1\n- Document 2\n"
--- 
+--
 -- Alternatively, if you only need a single YAML document in a YAML stream you might want to use the convenience function 'encode1'.
 --
 -- @since 0.2.0
 encode :: ToYAML v => [v] -> BS.L.ByteString
 encode vList = encodeNode $ map (Doc . toYAML) vList
 
--- | Convenience wrapper over 'encode' taking exactly one YAML Node. 
+-- | Convenience wrapper over 'encode' taking exactly one YAML Node.
 -- Hence it will always output exactly one YAML Document
 --
 -- Here is example of encoding a list of strings to produce exactly one of YAML Documents

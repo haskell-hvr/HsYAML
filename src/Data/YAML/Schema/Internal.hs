@@ -27,16 +27,16 @@ module Data.YAML.Schema.Internal
     , encodeDouble, encodeBool, encodeInt
     ) where
 
-import qualified Data.Char            as C
-import qualified Data.Map             as Map
-import qualified Data.Set             as Set
-import qualified Data.Text            as T
-import           Numeric              (readHex, readOct)
-import           Text.Parsec          as P
+import qualified Data.Char        as C
+import qualified Data.Map         as Map
+import qualified Data.Set         as Set
+import qualified Data.Text        as T
+import           Numeric          (readHex, readOct)
+import           Text.Parsec      as P
 import           Text.Parsec.Text
 
-import           Data.YAML.Event      (Tag, isUntagged, mkTag, untagged,ScalarStyle(..))
-import qualified Data.YAML.Event      as YE
+import           Data.YAML.Event  (ScalarStyle (..), Tag, isUntagged, mkTag, untagged)
+import qualified Data.YAML.Event  as YE
 
 import           Util
 
@@ -55,9 +55,9 @@ data Scalar = SNull            -- ^ @tag:yaml.org,2002:null@
 --
 -- A YAML schema defines how implicit tags are resolved to concrete tags and how data is represented textually in YAML.
 data SchemaResolver = SchemaResolver
-     { schemaResolverScalar   :: Tag -> YE.ScalarStyle -> T.Text -> Either String Scalar
-     , schemaResolverSequence :: Tag -> Either String Tag
-     , schemaResolverMapping  :: Tag -> Either String Tag
+     { schemaResolverScalar            :: Tag -> YE.ScalarStyle -> T.Text -> Either String Scalar
+     , schemaResolverSequence          :: Tag -> Either String Tag
+     , schemaResolverMapping           :: Tag -> Either String Tag
      , schemaResolverMappingDuplicates :: Bool -- TODO: use something different from 'Bool'
      }
 
@@ -386,7 +386,7 @@ failsafeSchemaEncoder = SchemaEncoder{..}
   where
 
     schemaEncoderScalar s = case s of
-      SNull        -> Left  "SNull scalar type not supported in failsafeSchemaEncoder"    
+      SNull        -> Left  "SNull scalar type not supported in failsafeSchemaEncoder"
       SBool  _     -> Left  "SBool scalar type not supported in failsafeSchemaEncoder"
       SFloat _     -> Left  "SFloat scalar type not supported in failsafeSchemaEncoder"
       SInt   _     -> Left  "SInt scalar type not supported in failsafeSchemaEncoder"
@@ -405,7 +405,7 @@ jsonSchemaEncoder = SchemaEncoder{..}
   where
 
     schemaEncoderScalar s = case s of
-      SNull         -> Right (untagged, Plain, "null") 
+      SNull         -> Right (untagged, Plain, "null")
       SBool  bool   -> Right (untagged, Plain, encodeBool bool)
       SFloat double -> Right (untagged, Plain, encodeDouble double)
       SInt   int    -> Right (untagged, Plain, encodeInt int)
@@ -482,7 +482,7 @@ coreEncodeStr t
   | isAmbiguous coreSchemaResolver t = Right (untagged, DoubleQuoted, t)
   | otherwise                        = Right (untagged, Plain, t)
 
--- | These are some characters which can be used in 'Plain' 'Scalar's safely without any quotes (see <https://yaml.org/spec/1.2/spec.html#c-indicator Indicator Characters>). 
+-- | These are some characters which can be used in 'Plain' 'Scalar's safely without any quotes (see <https://yaml.org/spec/1.2/spec.html#c-indicator Indicator Characters>).
 --
 -- __NOTE__: This does not mean that other characters (like @"\\n"@ and other special characters like @"-?:,[]{}#&*!,>%\@`\"\'"@) cannot be used in 'Plain' 'Scalar's.
 --
@@ -491,7 +491,7 @@ isPlainChar :: Char -> Bool
 isPlainChar c = C.isAlphaNum c || c `elem` (" ~$^+=</;._\\" :: String)  -- not $ c `elem` "\n-?:,[]{}#&*!,>%@`\\'\""
 
 -- | Returns True if the string can be decoded by the given 'SchemaResolver'
--- into a 'Scalar' which is not a of type 'SStr'. 
+-- into a 'Scalar' which is not a of type 'SStr'.
 --
 -- >>> isAmbiguous coreSchemaResolver "true"
 -- True
@@ -502,9 +502,9 @@ isPlainChar c = C.isAlphaNum c || c `elem` (" ~$^+=</;._\\" :: String)  -- not $
 -- @since 0.2.0
 isAmbiguous :: SchemaResolver -> T.Text -> Bool
 isAmbiguous SchemaResolver{..} t = case schemaResolverScalar untagged Plain t of
-  Left err -> error err
+  Left err        -> error err
   Right (SStr _ ) -> False
-  Right _ -> True
+  Right _         -> True
 
 -- | According to YAML 1.2 'coreSchemaEncoder' is the default 'SchemaEncoder'
 --

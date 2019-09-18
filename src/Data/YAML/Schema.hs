@@ -47,4 +47,4 @@ module Data.YAML.Schema
     , encodeInt
     ) where
 
-import Data.YAML.Schema.Internal
+import           Data.YAML.Schema.Internal

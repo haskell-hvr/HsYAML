@@ -7,7 +7,7 @@
 --
 -- Event-stream oriented YAML parsing and serializing API
 module Data.YAML.Event
-    ( 
+    (
       -- * Tutorial
       -- $start
 
@@ -77,7 +77,7 @@ tok2pos Y.Token { Y.tByteOffset = posByteOffset, Y.tCharOffset = posCharOffset, 
 
 -- Construct a 'EvPos' from the given 'Event' and 'Pos'
 getEvPos :: Event -> Y.Token -> EvPos
-getEvPos ev tok = EvPos { eEvent = ev , ePos = tok2pos tok } 
+getEvPos ev tok = EvPos { eEvent = ev , ePos = tok2pos tok }
 
 -- Initial position('Pos' corresponding to the 'StreamStart')
 initPos :: Pos
@@ -130,9 +130,9 @@ getUriTag toks0 = do
 
 -- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
 --
--- The parsed Events allow us to round-trip at the event-level while preserving many features and presentation details like 
--- 'Comment's,'ScalarStyle','NodeStyle', 'Anchor's, 'Directives' marker along with YAML document version, 
--- 'Chomp'ing Indicator,Indentation Indicator ('IndentOfs') ,ordering, etc. 
+-- The parsed Events allow us to round-trip at the event-level while preserving many features and presentation details like
+-- 'Comment's,'ScalarStyle','NodeStyle', 'Anchor's, 'Directives' marker along with YAML document version,
+-- 'Chomp'ing Indicator,Indentation Indicator ('IndentOfs') ,ordering, etc.
 -- It does not preserve non-content white spaces.
 --
 -- The input 'BS.L.ByteString' is expected to have a YAML 1.2 stream
@@ -350,13 +350,13 @@ goNode0 DInfo {..} = goNode
 
         chn :: ScalarStyle -> Chomp -> ScalarStyle
         chn (Literal _ digit) chmp = Literal chmp digit
-        chn (Folded _ digit) chmp = Folded chmp digit
-        chn _ _ = error "impossible"
+        chn (Folded _ digit) chmp  = Folded chmp digit
+        chn _ _                    = error "impossible"
 
         chn' :: ScalarStyle -> Int -> ScalarStyle
         chn' (Literal b _) digit = Literal b (toEnum digit)
-        chn' (Folded b _) digit = Folded b (toEnum digit)
-        chn' _ _ = error "impossible"
+        chn' (Folded b _) digit  = Folded b (toEnum digit)
+        chn' _ _                 = error "impossible"
 
         ----------------------------------------------------------------------------
 
@@ -525,9 +525,9 @@ unescape [c] = Map.lookup c m
       ]
 unescape _ = Nothing
 
--- 
+--
 -- $start
--- 
+--
 -- "Data.YAML" module provides us with API which allow us to interact with YAML data at the cost of some presentation details.
 -- In contrast, this module provide us with API which gives us access to a other significant details like 'ScalarStyle's, 'NodeStyle's, 'Comment's, etc.
 --
@@ -543,7 +543,7 @@ unescape _ = Nothing
 -- @
 --
 -- then you might want to use the function 'parseEvents'.
--- 
+--
 -- The following is a reference implementation of a function using 'parseEvents'.
 -- It takes a YAML document as input and prints the parsed YAML 'Event's.
 --
@@ -552,7 +552,7 @@ unescape _ = Nothing
 -- import qualified Data.ByteString.Lazy as BS.L
 --
 -- printEvents :: BS.L.ByteString -> IO ()
--- printEvents input = 
+-- printEvents input =
 --   forM_ ('parseEvents' input) $ \ev -> case ev of
 --     Left _ -> error "Failed to parse"
 --     Right event -> print ('eEvent' event)
@@ -576,7 +576,7 @@ unescape _ = Nothing
 -- Notice that now we have all the necessary details in the form of 'Event's.
 --
 -- We can now write simple functions to work with this data without losing any more details.
--- 
+--
 -- $serialize
 --
 -- Now, suppose we want to generate back the YAML document after playing with the Event-stream,
@@ -586,7 +586,7 @@ unescape _ = Nothing
 --
 -- @
 -- import Data.YAML.Event
--- import qualified Data.YAML.Token as YT 
+-- import qualified Data.YAML.Token as YT
 -- import qualified Data.ByteString.Lazy as BS.L
 --
 -- yaml2yaml :: BS.L.ByteString -> IO ()
@@ -605,7 +605,7 @@ unescape _ = Nothing
 -- # All 'Comment's are preserved
 -- date    : 2019-07-12
 -- bill-to : # 'Anchor' represents a map node
---    &id001 
+--    &id001
 --     address:
 --         lines: # This a Block 'Scalar' with 'Keep' chomping Indicator and 'IndentAuto' Indentant indicator
 --                 |+ # Extra Indentation (non-content white space) will not be preserved
@@ -618,15 +618,15 @@ unescape _ = Nothing
 -- ship-to  : # This is an 'Alias'
 --            *id001
 -- # Key is a 'Scalar' and Value is a Sequence
--- Other Details: 
+-- Other Details:
 --           total: $ 3000
 --           # 'Tag's are also preserved
---           Online Payment: !!bool True 
+--           Online Payment: !!bool True
 --           product:
---               - Item1 
+--               - Item1
 --               # This comment is inside a Sequence
 --               - Item2
--- ... 
+-- ...
 -- # 'DocumentEnd' True
 -- # 'StreamEnd'
 -- @
@@ -646,8 +646,8 @@ unescape _ = Nothing
 --       |+
 --       Vijay
 --       IIT Hyderabad
--- 
--- 
+--
+--
 --     # Trailing newlines are a preserved here as they are a part of the 'Scalar' node
 --     country: India
 -- ship-to: # This is an 'Alias'
@@ -668,11 +668,11 @@ unescape _ = Nothing
 --
 -- $commenting
 --
--- Round-tripping at event-level will preserve all the comments and their relative position in the YAML-document but still, 
--- we lose some information like the exact indentation and the position at which the comments were present previously. 
+-- Round-tripping at event-level will preserve all the comments and their relative position in the YAML-document but still,
+-- we lose some information like the exact indentation and the position at which the comments were present previously.
 -- This information sometimes can be quiet important for human-perception of comments.
 -- Below are some guildlines, so that you can avoid ambiguities.
--- 
+--
 -- 1) Always try to start your comment in a newline. This step will avoid most of the ambiguities.
 --
 -- 2) Comments automaticly get indented according to the level in which they are present. For example,
@@ -711,7 +711,7 @@ unescape _ = Nothing
 --
 -- @
 -- - scalar # After scalar
--- - random  : scalar # After scalar 
+-- - random  : scalar # After scalar
 --   key: 1
 -- # not after scalar
 -- - random  : scalar
@@ -719,7 +719,7 @@ unescape _ = Nothing
 -- - random  : # not after scalar
 --             scalar
 --   # not after scalar
---   key: 1 
+--   key: 1
 -- @
 --
 -- After a round-trip looks like
@@ -728,7 +728,7 @@ unescape _ = Nothing
 -- - scalar
 -- # After scalar
 -- - random: scalar
---   # After scalar 
+--   # After scalar
 --   key: 1
 --   # not after scalar
 -- - random: scalar
@@ -816,6 +816,6 @@ unescape _ = Nothing
 --   # Complex value ends
 -- @
 --
--- The above two YAML-documents, after parsing produce the same 'Event'-stream. 
+-- The above two YAML-documents, after parsing produce the same 'Event'-stream.
 --
 -- So, these are some limitation of this Format-preserving YAML processor.

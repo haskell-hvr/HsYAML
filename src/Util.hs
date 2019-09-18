@@ -31,7 +31,7 @@ import           Data.Int                     as X
 import           Data.Word                    as X
 import           Numeric.Natural              as X (Natural)
 
-import           Control.Monad.Except         as X (MonadError(..), ExceptT(..), runExceptT)
+import           Control.Monad.Except         as X (ExceptT (..), MonadError (..), runExceptT)
 import           Control.Monad.Identity       as X
 
 import           Data.Char                    as X (chr, ord)
@@ -43,10 +43,10 @@ import           Data.Semigroup               ((<>))
 #else
 import           Data.Monoid                  ((<>))
 #endif
-import           Data.Set                     as X (Set)
-import           Data.Text                    as X (Text)
 import qualified Data.ByteString              as BS
 import qualified Data.ByteString.Lazy         as BS.L
+import           Data.Set                     as X (Set)
+import           Data.Text                    as X (Text)
 
 import           Text.ParserCombinators.ReadP as P
 import           Text.Read

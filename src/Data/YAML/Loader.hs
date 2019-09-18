@@ -65,7 +65,7 @@ decodeLoader Loader{..} bs0 = do
   where
     isComment evPos = case evPos of
       Right (YE.EvPos {eEvent = (YE.Comment _), ePos = _}) -> True
-      _ -> False 
+      _                                                    -> False
 
     goStream :: PT n m [n]
     goStream = do
@@ -108,7 +108,7 @@ decodeLoader Loader{..} bs0 = do
         return n
 
     exitAnchor :: Maybe YE.Anchor -> PT n m ()
-    exitAnchor Nothing = return ()
+    exitAnchor Nothing  = return ()
     exitAnchor (Just a) = modify $ \s0 -> s0 { sCycle = Set.delete a (sCycle s0) }
 
     goNode :: PT n m n
@@ -135,7 +135,7 @@ decodeLoader Loader{..} bs0 = do
           d <- gets sDict
           cy <- gets sCycle
           case Map.lookup a d of
-            Nothing -> throwError (pos, ("anchor not found: " ++ show a))
+            Nothing       -> throwError (pos, ("anchor not found: " ++ show a))
             Just (nid,n') -> liftEither' =<< lift (yAlias nid (Set.member a cy) n' pos)
 
         _ -> throwError (pos, "goNode: unexpected event")
@@ -192,8 +192,8 @@ eof :: Monad m => PT n m ()
 eof = do
   s0 <- get
   case sEvs s0 of
-    [] -> return ()
-    (ev:_)  -> throwError (YE.ePos ev, "eof expected")
+    []     -> return ()
+    (ev:_) -> throwError (YE.ePos ev, "eof expected")
 
 -- NB: consumes the end-event
 manyUnless :: Monad m => (YE.Event -> Bool) -> PT n m a -> PT n m [a]

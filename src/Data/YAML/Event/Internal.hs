@@ -90,9 +90,9 @@ data ScalarStyle = Plain
                  deriving (Eq,Ord,Show)
 
 -- | <https://yaml.org/spec/1.2/spec.html#id2794534 Block Chomping Indicator>
---  
+--
 -- @since 0.2.0
-data Chomp = Strip -- ^ Remove all trailing line breaks and shows the presence of @-@ chomping indicator. 
+data Chomp = Strip -- ^ Remove all trailing line breaks and shows the presence of @-@ chomping indicator.
            | Clip  -- ^ Keep first trailing line break; this also the default behavior used if no explicit chomping indicator is specified.
            | Keep  -- ^ Keep all trailing line breaks and shows the presence of @+@ chomping indicator.
            deriving (Eq,Ord,Show)
@@ -116,11 +116,11 @@ data NodeStyle = Flow
 --
 -- @since 0.2.0
 scalarNodeStyle :: ScalarStyle -> NodeStyle
-scalarNodeStyle Plain        = Flow
-scalarNodeStyle SingleQuoted = Flow
-scalarNodeStyle DoubleQuoted = Flow
-scalarNodeStyle (Literal _ _)  = Block
-scalarNodeStyle (Folded _ _ )  = Block
+scalarNodeStyle Plain         = Flow
+scalarNodeStyle SingleQuoted  = Flow
+scalarNodeStyle DoubleQuoted  = Flow
+scalarNodeStyle (Literal _ _) = Block
+scalarNodeStyle (Folded _ _ ) = Block
 
 -- | YAML Anchor identifiers
 type Anchor = Text

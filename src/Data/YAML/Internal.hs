@@ -12,11 +12,11 @@ module Data.YAML.Internal
     , Mapping
     ) where
 
-import qualified Data.Map              as Map
+import qualified Data.Map                  as Map
 
-import           Data.YAML.Event       (Tag)
-import           Data.YAML.Schema.Internal (Scalar(..))
-import           Data.YAML.Loader      (NodeId)
+import           Data.YAML.Event           (Tag)
+import           Data.YAML.Loader          (NodeId)
+import           Data.YAML.Schema.Internal (Scalar (..))
 
 import           Util
 
