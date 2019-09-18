@@ -212,8 +212,8 @@ cmdYaml2YamlVal = do
 cmdPrintNode :: IO()
 cmdPrintNode = do
   str <-  BS.L.getContents
-  case decode str :: Either String [Node Pos] of
-    Left s -> do
+  case decode str :: Either (Pos, String) [Node Pos] of
+    Left (pos, s) -> do
       hPutStrLn stdout s
       hFlush stdout
     Right nodeSeq -> forM_ nodeSeq $ \node -> do
@@ -223,8 +223,8 @@ cmdPrintNode = do
 cmdDumpYAML :: IO()
 cmdDumpYAML = do
   str <-  BS.L.getContents
-  case decode str :: Either String [Node Pos] of
-    Left str -> do
+  case decode str :: Either (Pos, String) [Node Pos] of
+    Left (pos, str) -> do
       hPutStrLn stdout str
       hFlush stdout
     Right nodes -> do
@@ -279,13 +279,13 @@ instance FromYAML Value' where
           _          -> pure $ T.decodeUtf8 $ J.encodeStrict $ toProperValue k
 --        _          -> fail ("dictionary entry had non-string key " ++ show k)
 
-decodeAeson :: BS.L.ByteString -> Either String [J.Value]
+decodeAeson :: BS.L.ByteString -> Either (Pos,String) [J.Value]
 decodeAeson = fmap (map toProperValue) . decode'
   where
     -- TODO
-    decode' :: FromYAML v => BS.L.ByteString -> Either String [v]
+    decode' :: FromYAML v => BS.L.ByteString -> Either (Pos,String) [v]
     decode' bs0 = case decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 of
-                  Left (pos, err) -> Left (show pos ++ err) 
+                  Left (pos, err) -> Left (pos, err) 
                   Right a         -> Right a >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 
@@ -310,7 +310,7 @@ cmdYaml2Json = do
   inYamlDat <- BS.L.getContents
 
   case decodeAeson inYamlDat of
-    Left e -> fail e
+    Left (_, e) -> fail e
     Right vs -> do
       forM_ vs $ \v -> BS.L.putStrLn (J.encode v)
 
@@ -417,7 +417,7 @@ cmdRunTml args = do
                    putStrLn "OK!"
                    pure (Pass PassEvs)
                  Just inJsonDat -> do
-                   iutJson <- either fail pure $ decodeAeson inYamlDat
+                   iutJson <- either (fail. snd) pure $ decodeAeson inYamlDat
 
                    if iutJson == inJsonDat
                      then do
@@ -573,7 +573,7 @@ cmdRunTml' args = do
                    putStrLn "OK!"
                    pure (Pass PassEvs)
                  Just inJsonDat -> do
-                   iutJson <- either fail pure $ decodeAeson inYamlDat
+                   iutJson <- either (fail. snd) pure $ decodeAeson inYamlDat
 
                    if iutJson == inJsonDat
                      then do

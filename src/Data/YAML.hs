@@ -263,7 +263,7 @@ decodeNode' SchemaResolver{..} anchorNodes allowCycles bs0
 -- | YAML Parser 'Monad' used by 'FromYAML'
 --
 -- See also 'parseEither' or 'decode'
-newtype Parser a = P { unP :: Either String a }
+newtype Parser a = P { unP :: Either (Pos, String) a }
 
 instance Functor Parser where
   fmap f (P x) = P (fmap f x)
@@ -288,9 +288,10 @@ instance Monad Parser where
   fail = Fail.fail
 #endif
 
+
 -- | @since 0.1.1.0
 instance Fail.MonadFail Parser where
-  fail = P . Left
+  fail s = P (Left (fakePos, s))
 
 -- | @since 0.1.1.0
 instance Alternative Parser where
@@ -307,7 +308,7 @@ instance MonadPlus Parser where
 -- | Run 'Parser'
 --
 -- A common use-case is 'parseEither' 'parseYAML'.
-parseEither :: Parser a -> Either String a
+parseEither :: Parser a -> Either (Pos, String) a
 parseEither = unP
 
 -- | Informative failure helper
@@ -525,10 +526,8 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 -- decoding from YAML streams using the UTF-8, UTF-16 (LE or BE), or
 -- UTF-32 (LE or BE) encoding (which is auto-detected).
 --
-decode :: FromYAML v => BS.L.ByteString -> Either String [v]
-decode bs0 = case decodeNode bs0 of
-    Left (pos, err) -> Left (show pos ++ err)
-    Right a         -> Right a >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
+decode :: FromYAML v => BS.L.ByteString -> Either (Pos, String) [v]
+decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 -- | Convenience wrapper over 'decode' expecting exactly one YAML document
 --
@@ -542,27 +541,27 @@ decode bs0 = case decodeNode bs0 of
 -- Left "empty YAML stream"
 --
 -- @since 0.1.2.0
-decode1 :: FromYAML v => BS.L.ByteString -> Either String v
+decode1 :: FromYAML v => BS.L.ByteString -> Either (Pos, String) v
 decode1 text = do
   vs <- decode text
   case vs of
-    []  -> Left "empty YAML stream"
+    []  -> Left (fakePos, "empty YAML stream")
     [v] -> Right v
-    _   -> Left "unexpected multiple YAML documents"
+    _   -> Left (fakePos, "unexpected multiple YAML documents")
 
 -- | Like 'decode' but takes a strict 'BS.ByteString'
 --
 -- @since 0.1.1.0
-decodeStrict :: FromYAML v => BS.ByteString -> Either String [v]
+decodeStrict :: FromYAML v => BS.ByteString -> Either (Pos, String) [v]
 decodeStrict = decode . BS.L.fromChunks . (:[])
 
 -- | Like 'decode1' but takes a strict 'BS.ByteString'
 --
 -- @since 0.1.2.0
-decode1Strict :: FromYAML v => BS.ByteString -> Either String v
+decode1Strict :: FromYAML v => BS.ByteString -> Either (Pos, String) v
 decode1Strict text = do
   vs <- decodeStrict text
-  maybe (Left "expected unique") Right $ listToMaybe vs
+  maybe (Left (fakePos, "expected unique")) Right $ listToMaybe vs
 
 
 

@@ -31,7 +31,7 @@ roundTripDouble num denom
 
 roundTrip :: (Eq a, FromYAML a, ToYAML a) => (a -> a -> Bool) -> a -> a -> Bool
 roundTrip eq _ v =
-    case decode1 (encode1 v) :: (FromYAML a) => (Either String a) of
+    case decode1 (encode1 v) :: (FromYAML a) => (Either (Pos, String) a) of
       Left _    -> False
       Right ans -> ans `eq` v
 
