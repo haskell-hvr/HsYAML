@@ -292,6 +292,9 @@ instance Monad Parser where
 instance Fail.MonadFail Parser where
   fail s = P (Left (fakePos, s))
 
+failAtPos :: Pos -> String -> Parser a
+failAtPos pos s = P (Left (pos, s))
+
 -- | @since 0.1.1.0
 instance Alternative Parser where
   empty = fail "empty"
@@ -322,7 +325,7 @@ parseEither = unP
 typeMismatch :: String   -- ^ descriptive name of expected data
              -> Node Pos     -- ^ actual node
              -> Parser a
-typeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ got ++ " at " ++ position)
+typeMismatch expected node = failAtPos position ("expected " ++ expected ++ " instead of " ++ got)
   where
     got = case node of
             Scalar _ (SBool _)             -> "!!bool"
@@ -341,10 +344,10 @@ typeMismatch expected node = fail ("expected " ++ expected ++ " instead of " ++ 
                Nothing -> "non-specifically ? tagged (i.e. unresolved) "
                Just t  -> T.unpack t ++ " tagged"
     position = case node of
-              Scalar pos _     -> show pos
-              Anchor pos _ _   -> show pos
-              Mapping pos _ _  -> show pos
-              Sequence pos _ _ -> show pos
+              Scalar pos _     -> pos
+              Anchor pos _ _   -> pos
+              Mapping pos _ _  -> pos
+              Sequence pos _ _ -> pos
 
 -- | A type into which YAML nodes can be converted/deserialized
 class FromYAML a where
