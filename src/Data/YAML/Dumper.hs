@@ -94,8 +94,9 @@ encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEve
         isDocEnd lvl rest cont = if lvl == 0 then Right (DocumentEnd (rest /= [])): (cont rest) else (cont rest)
 
         ancName :: NodeId -> Maybe Anchor
-        ancName (-1) = Nothing
-        ancName nid  = Just $ T.pack ("a" ++ show nid)
+        ancName nid
+          | nid == (0-1) = Nothing
+          | otherwise    = Just $! T.pack ("a" ++ show nid)
 
         getTag :: (Tag -> Either String Tag) -> Tag -> Tag
         getTag f tag = case f tag of
