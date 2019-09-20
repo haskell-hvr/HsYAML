@@ -83,16 +83,6 @@ getEvPos ev tok = EvPos { eEvent = ev , ePos = tok2pos tok }
 initPos :: Pos
 initPos = Pos { posByteOffset = 0 , posCharOffset = 0  , posLine = 1 , posColumn = 0 }
 
--- Initial 'EvPos'
-initEvPos :: Event -> EvPos
-initEvPos ev = EvPos { eEvent = ev, ePos = initPos }
-
--- Pair Event with the corresponding Event-Start Position.
-delayPos :: Pos -> EvStream -> EvStream
-delayPos _ [] = []
-delayPos pos (Right EvPos{  eEvent = a ,ePos = nextPos } : rest ) = (Right EvPos{ eEvent = a , ePos = pos}: delayPos nextPos rest)
-delayPos _ (Left (nextPos, str) : rest ) = (Left (nextPos,str): delayPos nextPos rest)
-
 -- internal
 type TagHandle = Text
 type Props = (Maybe Text,Tag)
@@ -128,6 +118,15 @@ getUriTag toks0 = do
 
 -}
 
+fixUpEOS :: EvStream -> EvStream
+fixUpEOS = go initPos
+  where
+    go :: Pos -> EvStream -> EvStream
+    go _ [] = []
+    go p [Right (EvPos StreamEnd _)] = [Right (EvPos StreamEnd p)]
+    go _ (e@(Right (EvPos _ p)):es) = e : go p es
+    go _ (e@(Left (p,_)):es) = e : go p es
+
 -- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
 --
 -- The parsed Events allow us to round-trip at the event-level while preserving many features and presentation details like
@@ -138,9 +137,9 @@ getUriTag toks0 = do
 -- The input 'BS.L.ByteString' is expected to have a YAML 1.2 stream
 -- using the UTF-8, UTF-16 (LE or BE), or UTF-32 (LE or BE) encodings
 -- (which will be auto-detected).
-
+--
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ filter (not . isWhite) $ Y.tokenize bs0 False)
+parseEvents = \bs0 -> fixUpEOS $ Right (EvPos StreamStart initPos) : (go0 $ filter (not . isWhite) $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -158,7 +157,7 @@ parseEvents = \bs0 -> delayPos initPos $ Right (initEvPos StreamStart) : (go0 $ 
 
 
     go0 :: Tok2EvStream
-    go0 []                                                = [Right (initEvPos StreamEnd)]
+    go0 []                                                = [Right (EvPos StreamEnd initPos {- fixed up by fixUpEOS -} )]
     go0 toks0@(Y.Token { Y.tCode = Y.BeginComment} : _)   = goComment toks0 go0
     go0 toks0@(Y.Token { Y.tCode = Y.BeginDocument } : _) = go1 dinfo0 toks0
     go0 (Y.Token { Y.tCode = Y.DocumentEnd } : rest)      = go0 rest -- stray/redundant document-end markers cause this
@@ -242,7 +241,7 @@ goNode0 DInfo {..} = goNode
 
     goNode :: Tok2EvStreamCont
     goNode toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goNode cont)
-    goNode (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont = goScalar (mempty,untagged) rest (flip goNodeEnd cont)
+    goNode (tok@Y.Token { Y.tCode = Y.BeginScalar } : rest) cont = goScalar (tok2pos tok) (mempty,untagged) rest (flip goNodeEnd cont)
     goNode (tok@Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (SequenceStart Nothing untagged (seqInd ind)) tok): goSeq rest (flip goNodeEnd cont)
     goNode (tok@Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (MappingStart Nothing untagged (mapInd ind)) tok) : goMap rest (flip goNodeEnd cont)
     goNode (tok@Y.Token { Y.tCode = Y.BeginMapping }  : rest) cont = Right (getEvPos (MappingStart Nothing untagged Block) tok) : goMap rest (flip goNodeEnd cont)
@@ -257,7 +256,7 @@ goNode0 DInfo {..} = goNode
 
     goNode' :: Props -> Tok2EvStreamCont
     goNode' props toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont  = goComment toks0 (flip (goNode' props) cont)
-    goNode' props (Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont   = goScalar props rest (flip goNodeEnd cont)
+    goNode' props (tok@Y.Token { Y.tCode = Y.BeginScalar }   : rest) cont   = goScalar (tok2pos tok) props rest (flip goNodeEnd cont)
     goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginSequence } : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (SequenceStart manchor mtag (seqInd ind)) tok) : goSeq rest (flip goNodeEnd cont)
     goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginMapping }  : Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest) cont = Right (getEvPos (MappingStart manchor mtag (mapInd ind)) tok) : goMap rest (flip goNodeEnd cont)
     goNode' (manchor,mtag) (tok@Y.Token { Y.tCode = Y.BeginMapping } : rest) cont = Right (getEvPos (MappingStart manchor mtag Block) tok) : goMap rest (flip goNodeEnd cont)
@@ -327,8 +326,8 @@ goNode0 DInfo {..} = goNode
             | otherwise = cont (anchor,mkTag' ('!' : tag)) rest -- unresolved
     goTag _ xs _ = err xs
 
-    goScalar :: Props -> Tok2EvStreamCont
-    goScalar (manchor,tag) toks0 cont = go0 False Plain toks0
+    goScalar :: Pos -> Props -> Tok2EvStreamCont
+    goScalar pos0 (manchor,tag) toks0 cont = go0 False Plain toks0
       where
         go0 ii sty (Y.Token { Y.tCode = Y.Indicator, Y.tText = ind } : rest)
           | "'"  <- ind = go' ii "" SingleQuoted rest
@@ -344,7 +343,7 @@ goNode0 DInfo {..} = goNode
         go0 ii sty (Y.Token { Y.tCode = Y.Text, Y.tText = t } : rest)      = go' ii t sty rest
         go0 ii sty (Y.Token { Y.tCode = Y.LineFold } : rest)               = go' ii " " sty rest
         go0 ii sty (Y.Token { Y.tCode = Y.LineFeed } : rest)               = go' ii "\n" sty rest
-        go0 _  sty (tok@Y.Token { Y.tCode = Y.EndScalar } : rest)          = Right (getEvPos (Scalar manchor tag sty mempty) tok) : cont rest
+        go0 _  sty (Y.Token { Y.tCode = Y.EndScalar } : rest)          = Right (EvPos (Scalar manchor tag sty mempty) pos0) : cont rest
 
         go0 _ _ xs = err xs
 
@@ -408,7 +407,7 @@ goNode0 DInfo {..} = goNode
         go' ii acc sty (t@Y.Token { Y.tCode = Y.EndScalar } :
                      rest)
           | ii, hasLeadingSpace acc = [Left (tok2pos t, "leading empty lines contain more spaces than the first non-empty line in scalar: " ++ show acc)]
-          | otherwise = Right (getEvPos (Scalar manchor tag sty (T.pack acc)) t) : cont rest
+          | otherwise = Right (EvPos (Scalar manchor tag sty (T.pack acc)) pos0) : cont rest
 
         go' _ _ _ xs | False = error (show xs)
         go' _ _ _ xs = err xs
