@@ -97,7 +97,6 @@ import qualified Control.Monad.Fail        as Fail
 import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.Map                  as Map
-import           Data.Maybe                (listToMaybe)
 import qualified Data.Text                 as T
 
 import           Data.YAML.Dumper
@@ -550,12 +549,12 @@ decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 -- @since 0.2.0
 --
 decode1 :: FromYAML v => BS.L.ByteString -> Either (Pos, String) v
-decode1 text = do
-  vs <- decode text
-  case vs of
-    []  -> Left (fakePos, "empty YAML stream")
-    [v] -> Right v
-    _   -> Left (fakePos, "unexpected multiple YAML documents")
+decode1 bs0 = do
+  docs <- decodeNode bs0
+  case docs of
+    []  -> Left (Pos { posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0 }, "empty YAML stream")
+    [Doc v] -> parseEither $ parseYAML $ v
+    (_:Doc n:_) -> Left (nodeLoc n, "unexpected multiple YAML documents")
 
 -- | Like 'decode' but takes a strict 'BS.ByteString'
 --
@@ -569,11 +568,7 @@ decodeStrict = decode . BS.L.fromChunks . (:[])
 -- @since 0.2.0
 --
 decode1Strict :: FromYAML v => BS.ByteString -> Either (Pos, String) v
-decode1Strict text = do
-  vs <- decodeStrict text
-  maybe (Left (fakePos, "expected unique")) Right $ listToMaybe vs
-
-
+decode1Strict = decode1 . BS.L.fromChunks . (:[])
 
 -- $dumping
 --
