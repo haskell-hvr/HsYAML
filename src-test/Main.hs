@@ -49,6 +49,12 @@ main = do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
 
+    ("yaml2event-pos":args')
+      | null args' -> cmdYaml2EventPos
+      | otherwise -> do
+          hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
+          exitFailure
+
     ("yaml2yaml-validate":args')
       | null args' -> cmdYaml2YamlVal
       | otherwise -> do
@@ -118,6 +124,7 @@ main = do
       hPutStrLn stderr "  yaml2token0         reads YAML stream from STDIN and prints count of tokens to STDOUT"
       hPutStrLn stderr "  yaml2event          reads YAML stream from STDIN and dumps events to STDOUT"
       hPutStrLn stderr "  yaml2event0         reads YAML stream from STDIN and prints count of events to STDOUT"
+      hPutStrLn stderr "  yaml2event-pos      reads YAML stream from STDIN and dumps events & position to STDOUT"
       hPutStrLn stderr "  yaml2json           reads YAML stream from STDIN and dumps JSON to STDOUT"
       hPutStrLn stderr "  yaml2yaml           reads YAML stream from STDIN and dumps YAML to STDOUT (non-streaming version)"
       hPutStrLn stderr "  yaml2yaml-          reads YAML stream from STDIN and dumps YAML to STDOUT (streaming version)"
@@ -177,6 +184,29 @@ cmdYaml2Event = do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
     Right event -> print (eEvent event)
+      -- hPutStrLn stdout (ev2str True (eEvent event))
+      -- hFlush stdout
+
+cmdYaml2EventPos :: IO ()
+cmdYaml2EventPos = do
+  inYamlDat <- BS.L.getContents
+  let inYamlDatTxt = T.decodeUtf8 (BS.L.toStrict inYamlDat)
+      inYamlDatLns = T.lines inYamlDatTxt
+      maxLine = length inYamlDatLns
+
+  forM_ (parseEvents inYamlDat) $ \ev -> case ev of
+    Left (ofs,msg) -> do
+      hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
+      exitFailure
+    Right event -> do
+      let Pos{..} = ePos event
+
+      putStrLn ""
+      putStrLn (show posLine ++ ":" ++ show posColumn ++ ":\t" ++ show (eEvent event))
+      when (posLine <= maxLine) $ do
+        T.putStrLn ("| " <> (inYamlDatLns !! (posLine-1)))
+        putStrLn (replicate (posColumn+2) ' ' <> "^")
+
       -- hPutStrLn stdout (ev2str True (eEvent event))
       -- hFlush stdout
 
