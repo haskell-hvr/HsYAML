@@ -7,22 +7,22 @@ well as providing direct access to source locations throughout the
 parsing pipeline for improved error reporting.
 
 * Changes in `Data.YAML` module
-    * YAML 1.2 Schema encoders (#21)
-    * New `ToYAML` class for encoding Haskell Data-types from which YAML nodes can be constructed (#20)
+    * YAML 1.2 Schema encoders ([#21](https://github.com/haskell-hvr/HsYAML/pull/21))
+    * New `ToYAML` class for encoding Haskell Data-types from which YAML nodes can be constructed ([#20](https://github.com/haskell-hvr/HsYAML/pull/20))
         * New functions like `encodeNode`, `encodeNode'` for constructing AST.
         * New functions like `encode`, `encode1`, `encodeStrict`, `encode1Strict` for supporting typeclass-based dumping
         * Some ToYAML instances and other api
-    * Modify `typeMismatch` function to show error source location in error messages (#19)
+    * Modify `typeMismatch` function to show error source location in error messages ([#19](https://github.com/haskell-hvr/HsYAML/pull/19))
     * Provide location-aware 'failAtNode' alternative to 'fail'
 
 * Changes in `Data.YAML.Event` module
-    * Preserve and round-trip Comments at Event level(#24)
+    * Preserve and round-trip Comments at Event level([#24](https://github.com/haskell-hvr/HsYAML/pull/24))
         * New  `Comment` Event to preserve comments while parsing
         * Some additional implementations to preserve and round-trip comments
-    * Fix issue #22
-    * New `EvPos` type for recording event and their corresponding position (#19)
-    * Preserve Flow Mapping and Flow sequence (#18)
-    * Features to preserve Literal/Folded ScalarStyle (#15)
+    * Fix issue [#22](https://github.com/haskell-hvr/HsYAML/issues/22)
+    * New `EvPos` type for recording event and their corresponding position ([#19](https://github.com/haskell-hvr/HsYAML/pull/19))
+    * Preserve Flow Mapping and Flow sequence ([#18](https://github.com/haskell-hvr/HsYAML/pull/18))
+    * Features to preserve Literal/Folded ScalarStyle ([#15](https://github.com/haskell-hvr/HsYAML/pull/15))
         * New `Chomp` type denoting Block Chomping Indicator
         * New `IndentOfs` type denoting Block Indentation Indicator
     * New `NodeStyle` type denoting flow/block style
@@ -42,7 +42,7 @@ parsing pipeline for improved error reporting.
 
 * Define `Generic` and `NFData` instances for most types
 
-* Fix `X38W` testcase (#13, #14)
+* Fix `X38W` testcase ([#13](https://github.com/haskell-hvr/HsYAML/issues/13), [#14](https://github.com/haskell-hvr/HsYAML/issues/14))
 
 ---
 
