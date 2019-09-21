@@ -298,7 +298,7 @@ instance Monad Parser where
 
 -- | @since 0.1.1.0
 --
--- __NOTE__: 'fail' doesn't convey proper position information; it's strongly recommended to use 'failAtNode' instead.
+-- __NOTE__: 'fail' doesn't convey proper position information unless used within the @with*@-style helpers; it's recommended to use 'failAtNode' when covered by the location scope of a @with*@-style combinator.
 instance Fail.MonadFail Parser where
   fail s = P (Left (fakePos, s))
 
@@ -361,10 +361,18 @@ typeMismatch expected node = failAtNode node ("expected " ++ expected ++ " inste
 class FromYAML a where
   parseYAML :: Node Pos -> Parser a
 
+-- This helper fixes up 'fakePos' locations to a better guess; this is
+-- mostly used by the with*-style combinators
+{-# INLINE fixupFailPos #-}
+fixupFailPos :: Pos -> Parser a -> Parser a
+fixupFailPos pos (P (Left (pos0,emsg)))
+  | pos0 == fakePos  = P (Left (pos,emsg))
+fixupFailPos _ p = p
+
 -- | Operate on @tag:yaml.org,2002:null@ node (or fail)
 withNull :: String -> Parser a -> Node Pos -> Parser a
-withNull _        f (Scalar _ SNull) = f
-withNull expected _ v                = typeMismatch expected v
+withNull _        f (Scalar pos SNull) = fixupFailPos pos f
+withNull expected _ v                  = typeMismatch expected v
 
 
 -- | Trivial instance
@@ -376,24 +384,24 @@ instance FromYAML Bool where
 
 -- | Operate on @tag:yaml.org,2002:bool@ node (or fail)
 withBool :: String -> (Bool -> Parser a) -> Node Pos -> Parser a
-withBool _        f (Scalar _ (SBool b)) = f b
-withBool expected _ v                    = typeMismatch expected v
+withBool _        f (Scalar pos (SBool b)) = fixupFailPos pos (f b)
+withBool expected _ v                      = typeMismatch expected v
 
 instance FromYAML Text where
   parseYAML = withStr "!!str" pure
 
 -- | Operate on @tag:yaml.org,2002:str@ node (or fail)
 withStr :: String -> (Text -> Parser a) -> Node Pos -> Parser a
-withStr _        f (Scalar _ (SStr b)) = f b
-withStr expected _ v                   = typeMismatch expected v
+withStr _        f (Scalar pos (SStr b)) = fixupFailPos pos (f b)
+withStr expected _ v                     = typeMismatch expected v
 
 instance FromYAML Integer where
   parseYAML = withInt "!!int" pure
 
 -- | Operate on @tag:yaml.org,2002:int@ node (or fail)
 withInt :: String -> (Integer -> Parser a) -> Node Pos -> Parser a
-withInt _        f (Scalar _ (SInt b)) = f b
-withInt expected _ v                   = typeMismatch expected v
+withInt _        f (Scalar pos (SInt b)) = fixupFailPos pos (f b)
+withInt expected _ v                     = typeMismatch expected v
 
 -- | @since 0.1.1.0
 instance FromYAML Natural where
@@ -423,8 +431,8 @@ instance FromYAML Double where
 
 -- | Operate on @tag:yaml.org,2002:float@ node (or fail)
 withFloat :: String -> (Double -> Parser a) -> Node Pos -> Parser a
-withFloat _        f (Scalar _ (SFloat b)) = f b
-withFloat expected _ v                     = typeMismatch expected v
+withFloat _        f (Scalar pos (SFloat b)) = fixupFailPos pos (f b)
+withFloat expected _ v                       = typeMismatch expected v
 
 
 instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
@@ -432,8 +440,8 @@ instance (Ord k, FromYAML k, FromYAML v) => FromYAML (Map k v) where
 
 -- | Operate on @tag:yaml.org,2002:map@ node (or fail)
 withMap :: String -> (Mapping Pos -> Parser a) -> Node Pos -> Parser a
-withMap _        f (Mapping _ tag xs)
-  | tag == tagMap    = f xs
+withMap _        f (Mapping pos tag xs)
+  | tag == tagMap    = fixupFailPos pos (f xs)
 withMap expected _ v = typeMismatch expected v
 
 instance FromYAML v => FromYAML [v] where
@@ -441,8 +449,8 @@ instance FromYAML v => FromYAML [v] where
 
 -- | Operate on @tag:yaml.org,2002:seq@ node (or fail)
 withSeq :: String -> ([Node Pos] -> Parser a) -> Node Pos-> Parser a
-withSeq _        f (Sequence _ tag xs)
-  | tag == tagSeq    = f xs
+withSeq _        f (Sequence pos tag xs)
+  | tag == tagSeq    = fixupFailPos pos (f xs)
 withSeq expected _ v = typeMismatch expected v
 
 instance FromYAML a => FromYAML (Maybe a) where
