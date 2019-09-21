@@ -174,7 +174,7 @@ import           Util
 -- We can easily do that by using the 'Node' type, which is an instance of 'FromYAML', is used to represent an arbitrary YAML AST (abstract syntax tree). For example,
 --
 -- >>> decode1 "Name: Vijay" :: Either (Pos,String) (Node Pos)
--- Right (Mapping (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) Just "tag:yaml.org,2002:map" (fromList [(Scalar (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) (SStr "Name"),Scalar (Pos {posByteOffset = 4, posCharOffset = 4, posLine = 1, posColumn = 4}) (SStr "Vijay"))]))
+-- Right (Mapping (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) Just "tag:yaml.org,2002:map" (fromList [(Scalar (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) (SStr "Name"),Scalar (Pos {posByteOffset = 6, posCharOffset = 6, posLine = 1, posColumn = 6}) (SStr "Vijay"))]))
 --
 -- The type parameter 'Pos' is used to indicate the position of each YAML 'Node' in the document.
 -- So using the 'Node' type we can easily decode any YAML document.
@@ -557,10 +557,10 @@ decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 -- Right "Bar"
 --
 -- >>> decode1 "Foo\n---\nBar" :: Either (Pos,String) Text
--- Left "unexpected multiple YAML documents"
+-- Left (Pos {posByteOffset = 8, posCharOffset = 8, posLine = 3, posColumn = 0},"unexpected multiple YAML documents")
 --
 -- >>> decode1 "# Just a comment" :: Either (Pos,String) Text
--- Left "empty YAML stream"
+-- Left (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0},"empty YAML stream")
 --
 -- @since 0.2.0
 --
@@ -611,7 +611,7 @@ decode1Strict = decode1 . BS.L.fromChunks . (:[])
 --
 -- We can now 'encode' a node like so:
 --
--- >>> encode [Person {name = "Vijay", age = 19})
+-- >>> encode [Person {name = "Vijay", age = 19}]
 -- "age: 19\nname: Vijay\n"
 --
 -- There are predefined 'ToYAML' instances for many types. Here's an example encoding a complex Haskell Node'
