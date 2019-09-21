@@ -33,6 +33,7 @@ module Data.YAML
     , FromYAML(..)
     , Parser
     , parseEither
+    , failAtNode
     , typeMismatch
 
       -- ** Accessors for YAML 'Mapping's
@@ -296,11 +297,16 @@ instance Monad Parser where
 
 
 -- | @since 0.1.1.0
+--
+-- __NOTE__: 'fail' doesn't convey proper position information; it's strongly recommended to use 'failAtNode' instead.
 instance Fail.MonadFail Parser where
   fail s = P (Left (fakePos, s))
 
-failAtPos :: Pos -> String -> Parser a
-failAtPos pos s = P (Left (pos, s))
+-- | Trigger parsing failure located at a specific 'Node'
+--
+-- @since 0.2.0.0
+failAtNode :: Node Pos -> String -> Parser a
+failAtNode n s = P (Left (nodeLoc n, s))
 
 -- | @since 0.1.1.0
 instance Alternative Parser where
@@ -332,7 +338,7 @@ parseEither = unP
 typeMismatch :: String   -- ^ descriptive name of expected data
              -> Node Pos     -- ^ actual node
              -> Parser a
-typeMismatch expected node = failAtPos (nodeLoc node) ("expected " ++ expected ++ " instead of " ++ got)
+typeMismatch expected node = failAtNode node ("expected " ++ expected ++ " instead of " ++ got)
   where
     got = case node of
             Scalar _ (SBool _)             -> "!!bool"
