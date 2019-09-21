@@ -40,6 +40,8 @@ parsing pipeline for improved error reporting.
   as a loader-error (controllable via new
   `schemaResolverMappingDuplicates` schema property)
 
+* Define `Generic` and `NFData` instances for most types
+
 * Fix `X38W` testcase (#13, #14)
 
 ---

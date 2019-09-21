@@ -1,5 +1,6 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE Safe         #-}
+{-# LANGUAGE BangPatterns  #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE Safe          #-}
 
 -- |
 -- Copyright: © Oren Ben-Kiki 2007,
@@ -30,6 +31,7 @@ data Encoding = UTF8    -- ^ UTF-8 encoding (or ASCII)
               | UTF16BE -- ^ UTF-16 big endian
               | UTF32LE -- ^ UTF-32 little endian
               | UTF32BE -- ^ UTF-32 big endian
+              deriving (Eq,Generic)
 
 -- | @show encoding@ converts an 'Encoding' to the encoding name (with a "-")
 -- as used by most programs.
@@ -39,6 +41,10 @@ instance Show Encoding where
     show UTF16BE = "UTF-16BE"
     show UTF32LE = "UTF-32LE"
     show UTF32BE = "UTF-32BE"
+
+
+-- | @since 0.2.0
+instance NFData Encoding where rnf !_ = ()
 
 -- | @decode bytes@ automatically detects the 'Encoding' used and converts the
 -- /bytes/ to Unicode characters, with byte offsets. Note the offset is for

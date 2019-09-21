@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE Safe                #-}
@@ -48,8 +49,16 @@ data Scalar = SNull            -- ^ @tag:yaml.org,2002:null@
             | SStr    !Text    -- ^ @tag:yaml.org,2002:str@
 
             | SUnknown !Tag !Text -- ^ unknown/unsupported tag or untagged (thus unresolved) scalar
-            deriving (Eq,Ord,Show)
+            deriving (Eq,Ord,Show,Generic)
 
+-- | @since 0.2.0
+instance NFData Scalar where
+  rnf SNull          = ()
+  rnf (SBool _)      = ()
+  rnf (SFloat _)     = ()
+  rnf (SInt _)       = ()
+  rnf (SStr _)       = ()
+  rnf (SUnknown t _) = rnf t
 
 -- | Definition of a [YAML 1.2 Schema](http://yaml.org/spec/1.2/spec.html#Schema)
 --

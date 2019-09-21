@@ -1,4 +1,5 @@
-{-# LANGUAGE Safe #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE Safe          #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -34,7 +35,7 @@ data Node loc
   | Mapping  !loc !Tag (Mapping loc)
   | Sequence !loc !Tag [Node loc]
   | Anchor   !loc !NodeId !(Node loc)
-  deriving (Show)
+  deriving (Show,Generic)
 
 nodeLoc :: Node loc -> loc
 nodeLoc (Scalar pos _)     = pos

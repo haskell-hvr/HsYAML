@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
@@ -123,7 +124,11 @@ data Code = Bom             -- ^ BOM, contains \"@TF8@\", \"@TF16LE@\", \"@TF32B
           | Error           -- ^ Parsing error at this point.
           | Unparsed        -- ^ Unparsed due to errors (or at end of test).
           | Detected        -- ^ Detected parameter (for testing).
-  deriving (Show,Eq)
+  deriving (Show,Eq,Generic)
+
+-- | @since 0.2.0
+instance NFData Code where
+  rnf x = seq x ()
 
 {-
 -- | @show code@ converts a 'Code' to the one-character YEAST token code char.
@@ -182,8 +187,11 @@ data Token = Token {
     tLineChar   :: !Int,   -- ^ 0-based character in line.
     tCode       :: !Code,  -- ^ Specific token 'Code'.
     tText       :: !String -- ^ Contained input chars, if any.
-  } deriving Show
+  } deriving (Show,Generic)
 
+-- | @since 0.2.0
+instance NFData Token where
+  rnf Token { tText = txt } = rnf txt
 
 -- * Parsing framework
 --

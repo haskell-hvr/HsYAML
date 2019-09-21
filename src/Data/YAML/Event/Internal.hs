@@ -1,4 +1,6 @@
-{-# LANGUAGE Safe #-}
+{-# LANGUAGE BangPatterns  #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE Safe          #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
@@ -58,15 +60,32 @@ data Event
     | SequenceEnd
     | MappingStart   !(Maybe Anchor)  !Tag  !NodeStyle
     | MappingEnd
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic)
+
+-- | @since 0.2.0
+instance NFData Event where
+  rnf  StreamStart          = ()
+  rnf  StreamEnd            = ()
+  rnf (DocumentStart _)     = ()
+  rnf (DocumentEnd _)       = ()
+  rnf (Comment _)           = ()
+  rnf (Alias _)             = ()
+  rnf (Scalar a _ _ _)      = rnf a
+  rnf (SequenceStart a _ _) = rnf a
+  rnf  SequenceEnd          = ()
+  rnf (MappingStart a _ _)  = rnf a
+  rnf  MappingEnd           = ()
 
 -- |'Event' with corresponding Pos in YAML stream
 --
 -- @since 0.2.0
-data EvPos = EvPos{
-    eEvent :: !Event,
-    ePos   :: !Pos
-}  deriving (Eq, Show)
+data EvPos = EvPos
+  { eEvent :: !Event
+  , ePos   :: !Pos
+  }  deriving (Eq, Show, Generic)
+
+-- | @since 0.2.0
+instance NFData EvPos where rnf (EvPos ev p) = rnf (ev,p)
 
 -- | Encodes document @%YAML@ directives and the directives end-marker
 --
@@ -74,7 +93,10 @@ data EvPos = EvPos{
 data Directives = NoDirEndMarker    -- ^ no directives and also no @---@ marker
                 | DirEndMarkerNoVersion -- ^ @---@ marker present, but no explicit @%YAML@ directive present
                 | DirEndMarkerVersion !Word -- ^ @---@ marker present, as well as a @%YAML 1.mi@ version directive; the minor version @mi@ is stored in the 'Word' field.
-                deriving (Show, Eq)
+                deriving (Show, Eq, Generic)
+
+-- | @since 0.2.0
+instance NFData Directives where rnf !_ = ()
 
 -- | 'Scalar'-specific node style
 --
@@ -87,7 +109,10 @@ data ScalarStyle = Plain
                  | DoubleQuoted
                  | Literal !Chomp !IndentOfs
                  | Folded !Chomp !IndentOfs
-                 deriving (Eq,Ord,Show)
+                 deriving (Eq,Ord,Show,Generic)
+
+-- | @since 0.2.0
+instance NFData ScalarStyle where rnf !_ = ()
 
 -- | <https://yaml.org/spec/1.2/spec.html#id2794534 Block Chomping Indicator>
 --
@@ -95,7 +120,10 @@ data ScalarStyle = Plain
 data Chomp = Strip -- ^ Remove all trailing line breaks and shows the presence of @-@ chomping indicator.
            | Clip  -- ^ Keep first trailing line break; this also the default behavior used if no explicit chomping indicator is specified.
            | Keep  -- ^ Keep all trailing line breaks and shows the presence of @+@ chomping indicator.
-           deriving (Eq,Ord,Show)
+           deriving (Eq,Ord,Show,Generic)
+
+-- | @since 0.2.0
+instance NFData Chomp where rnf !_ = ()
 
 -- | Block Indentation Indicator
 --
@@ -103,14 +131,20 @@ data Chomp = Strip -- ^ Remove all trailing line breaks and shows the presence o
 --
 -- @since 0.2.0
 data IndentOfs = IndentAuto | IndentOfs1 | IndentOfs2 | IndentOfs3 | IndentOfs4 | IndentOfs5 | IndentOfs6 | IndentOfs7 | IndentOfs8 | IndentOfs9
-                  deriving (Eq, Ord, Show, Enum)
+                  deriving (Eq, Ord, Show, Enum, Generic)
+
+-- | @since 0.2.0
+instance NFData IndentOfs where rnf !_ = ()
 
 -- | Node style
 --
 -- @since 0.2.0
 data NodeStyle = Flow
                | Block
-               deriving (Eq,Ord,Show)
+               deriving (Eq,Ord,Show,Generic)
+
+-- | @since 0.2.0
+instance NFData NodeStyle where rnf !_ = ()
 
 -- | Convert 'ScalarStyle' to 'NodeStyle'
 --
@@ -127,11 +161,13 @@ type Anchor = Text
 
 -- | YAML Tags
 newtype Tag = Tag (Maybe Text)
-            deriving (Eq,Ord)
+            deriving (Eq,Ord,Generic)
 
 instance Show Tag where
   show (Tag x) = show x
 
+-- | @since 0.2.0
+instance NFData Tag where rnf (Tag x) = rnf x
 
 -- | Event stream produced by 'parseEvents'
 --
@@ -148,7 +184,10 @@ data Pos = Pos
     , posCharOffset :: !Int -- ^ 0-based character (Unicode code-point) offset
     , posLine       :: !Int -- ^ 1-based line number
     , posColumn     :: !Int -- ^ 0-based character (Unicode code-point) column number
-    }  deriving (Eq, Show)
+    }  deriving (Eq, Show, Generic)
+
+-- | @since 0.2.0
+instance NFData Pos where rnf !_ = ()
 
 -- | Convert 'Tag' to its string representation
 --

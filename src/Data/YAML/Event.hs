@@ -122,10 +122,10 @@ fixUpEOS :: EvStream -> EvStream
 fixUpEOS = go initPos
   where
     go :: Pos -> EvStream -> EvStream
-    go _ [] = []
+    go _ []                          = []
     go p [Right (EvPos StreamEnd _)] = [Right (EvPos StreamEnd p)]
-    go _ (e@(Right (EvPos _ p)):es) = e : go p es
-    go _ (e@(Left (p,_)):es) = e : go p es
+    go _ (e@(Right (EvPos _ p)):es)  = e : go p es
+    go _ (e@(Left (p,_)):es)         = e : go p es
 
 -- | Parse YAML 'Event's from a lazy 'BS.L.ByteString'.
 --

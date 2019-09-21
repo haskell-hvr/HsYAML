@@ -25,10 +25,12 @@ module Util
     ) where
 
 import           Control.Applicative          as X
+import           Control.DeepSeq              as X (NFData (rnf))
 import           Control.Monad                as X
 import           Data.Functor                 as X
 import           Data.Int                     as X
 import           Data.Word                    as X
+import           GHC.Generics                 as X (Generic)
 import           Numeric.Natural              as X (Natural)
 
 import           Control.Monad.Except         as X (ExceptT (..), MonadError (..), runExceptT)
