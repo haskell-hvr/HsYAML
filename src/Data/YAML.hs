@@ -300,7 +300,7 @@ instance Monad Parser where
 
 -- | @since 0.1.1.0
 --
--- __NOTE__: 'fail' doesn't convey proper position information unless used within the @with*@-style helpers; it's recommended to use 'failAtNode' when covered by the location scope of a @with*@-style combinator.
+-- __NOTE__: 'fail' doesn't convey proper position information unless used within the @with*@-style helpers; consequently it's recommended to use 'failAtNode' when /not/ covered by the location scope of a @with*@-style combinator.
 instance Fail.MonadFail Parser where
   fail s = P (Left (fakePos, s))
 
