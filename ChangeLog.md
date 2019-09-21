@@ -1,7 +1,8 @@
+See also http://pvp.haskell.org/faq
+
 ## 0.2.0.0
 
-This release incorporates the work from [Vijay Tadikamalla's GSOC 2019
-Project](https://vijayphoenix.github.io/blog/gsoc-the-conclusion/).
+This release incorporates the work from [Vijay Tadikamalla's GSOC 2019 Project](https://vijayphoenix.github.io/blog/gsoc-the-conclusion/).
 Highlights of this major release include support for emitting YAML as
 well as providing direct access to source locations throughout the
 parsing pipeline for improved error reporting.
@@ -9,7 +10,7 @@ parsing pipeline for improved error reporting.
 * Changes in `Data.YAML` module
     * YAML 1.2 Schema encoders ([#21](https://github.com/haskell-hvr/HsYAML/pull/21))
     * New `ToYAML` class for encoding Haskell Data-types from which YAML nodes can be constructed ([#20](https://github.com/haskell-hvr/HsYAML/pull/20))
-        * New functions like `encodeNode`, `encodeNode'` for constructing AST.
+        * New functions like `encodeNode`, `encodeNode'` for constructing AST
         * New functions like `encode`, `encode1`, `encodeStrict`, `encode1Strict` for supporting typeclass-based dumping
         * Some ToYAML instances and other api
     * Modify `typeMismatch` function to show error source location in error messages ([#19](https://github.com/haskell-hvr/HsYAML/pull/19))
