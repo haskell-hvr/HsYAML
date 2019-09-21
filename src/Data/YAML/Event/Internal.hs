@@ -169,7 +169,7 @@ instance Show Tag where
 -- | @since 0.2.0
 instance NFData Tag where rnf (Tag x) = rnf x
 
--- | Event stream produced by 'parseEvents'
+-- | Event stream produced by 'Data.YAML.Event.parseEvents'
 --
 -- A 'Left' value denotes parsing errors. The event stream ends
 -- immediately once a 'Left' value is returned.

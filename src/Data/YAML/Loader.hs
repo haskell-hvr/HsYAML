@@ -52,7 +52,7 @@ type LoaderT m n = YE.Pos -> m (Either (YE.Pos,String) n)
 -- | Generalised document tree/graph construction
 --
 -- This doesn't yet perform any tag resolution (thus all scalars are
--- represented as 'Text' values). See also 'decodeNode' for a more
+-- represented as 'Text' values). See also 'Data.YAML.decodeNode' for a more
 -- convenient interface.
 --
 -- @since 0.2.0

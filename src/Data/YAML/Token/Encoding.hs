@@ -13,7 +13,7 @@
 -- there, we get to tailor it exactly to our needs. We use lazy byte strings as
 -- input, which should give reasonable I\/O performance when reading large
 -- files. The output is a normal 'Char' list which is easy to work with and
--- should be efficient enough as long as the 'Parser' does its job right.
+-- should be efficient enough as long as the 'Data.YAML.Token.Parser' does its job right.
 --
 module Data.YAML.Token.Encoding
   ( decode

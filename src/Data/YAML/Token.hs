@@ -213,7 +213,7 @@ instance NFData Token where
 -- so we maintain a single 'State' type rather than having a generic one that
 -- contains a polymorphic \"UserState\" field etc.
 
--- | A 'Parser' is basically a function computing a 'Reply'.
+-- | A 'Data.YAML.Token.Parser' is basically a function computing a 'Reply'.
 newtype Parser result = Parser (State -> Reply result)
 
 applyParser :: Parser result -> State -> Reply result
@@ -234,7 +234,7 @@ instance (Show result) => Show (Result result) where
                      More _         -> "More"
 -}
 
--- | Each invication of a 'Parser' yields a 'Reply'. The 'Result' is only one
+-- | Each invocation of a 'Data.YAML.Token.Parser' yields a 'Reply'. The 'Result' is only one
 -- part of the 'Reply'.
 data Reply result = Reply {
     rResult :: !(Result result), -- ^ Parsing result.
@@ -357,11 +357,11 @@ setCode code state = state { sCode = code }
 -- 'Match' class.
 
 -- | @Match parameter result@ specifies that we can convert the /parameter/ to
--- a 'Parser' returning the /result/.
+-- a 'Data.YAML.Token.Parser' returning the /result/.
 class Match parameter result | parameter -> result where
     match :: parameter -> Parser result
 
--- | We don't need to convert a 'Parser', it already is one.
+-- | We don't need to convert a 'Data.YAML.Token.Parser', it already is one.
 instance Match (Parser result) result where
     match = id
 
@@ -977,7 +977,7 @@ instance Read Chomp where
 
 -- * Tokenizers
 --
--- We encapsulate the 'Parser' inside a 'Tokenizer'. This allows us to hide the
+-- We encapsulate the 'Data.YAML.Token.Parser' inside a 'Tokenizer'. This allows us to hide the
 -- implementation details from our callers.
 
 -- | 'Tokenizer' converts a input text into a list of 'Token'. Errors
@@ -1079,7 +1079,7 @@ asInteger = Parser $ \ state -> returnReply state $ ord (state^.sLast) .- 48
 
 -- | @result value@ is the same as /return value/ except that we give the
 -- Haskell type deduction the additional boost it needs to figure out this is
--- wrapped in a 'Parser'.
+-- wrapped in a 'Data.YAML.Token.Parser'.
 result :: result -> Parser result
 result = return
 

@@ -29,7 +29,7 @@ module Data.YAML.Schema
       --
       -- | According to YAML 1.2 the recommended default 'SchemaEncoder' is 'coreSchemaEncoder' under which 'Scalar's are encoded as follows:
       --
-      -- * String which are made of Plain Characters (see 'isPlainChar'), unambiguous (see 'isAmbiguous') and do not contain any leading/trailing spaces are encoded as 'Plain' 'Scalar'.
+      -- * String which are made of Plain Characters (see 'isPlainChar'), unambiguous (see 'isAmbiguous') and do not contain any leading/trailing spaces are encoded as 'Data.YAML.Event.Plain' 'Scalar'.
       --
       -- * Rest of the strings are encoded in DoubleQuotes
       --

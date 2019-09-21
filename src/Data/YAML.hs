@@ -36,7 +36,7 @@ module Data.YAML
     , failAtNode
     , typeMismatch
 
-      -- ** Accessors for YAML 'Mapping's
+      -- ** Accessors for YAML t'Mapping's
     , Mapping
     , (.:), (.:?), (.:!), (.!=)
 
@@ -130,7 +130,7 @@ import           Util
 -- > - name: Mina Crandon
 -- >   age: 53
 --
--- into a native Haskell data structure of type @[Person]@, i.e. a list of 'Person' records.
+-- into a native Haskell data structure of type @[Person]@, i.e. a list of @Person@ records.
 --
 -- The code below shows how to manually define a @Person@ record type together with a 'FromYAML' instance:
 --
@@ -180,13 +180,13 @@ import           Util
 -- So using the 'Node' type we can easily decode any YAML document.
 
 
--- | Retrieve value in 'Mapping' indexed by a @!!str@ 'Text' key.
+-- | Retrieve value in t'Mapping' indexed by a @!!str@ 'Text' key.
 --
 -- This parser fails if the key doesn't exist.
 (.:) :: FromYAML a => Mapping Pos -> Text -> Parser a
 m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
--- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
+-- | Retrieve optional value in t'Mapping' indexed by a @!!str@ 'Text' key.
 --
 -- 'Nothing' is returned if the key is missing or points to a @tag:yaml.org,2002:null@ node.
 -- This combinator only fails if the key exists but cannot be converted to the required type.
@@ -195,7 +195,7 @@ m .: k = maybe (fail $ "key " ++ show k ++ " not found") parseYAML (Map.lookup (
 (.:?) :: FromYAML a => Mapping Pos -> Text -> Parser (Maybe a)
 m .:? k = maybe (pure Nothing) parseYAML (Map.lookup (Scalar fakePos (SStr k)) m)
 
--- | Retrieve optional value in 'Mapping' indexed by a @!!str@ 'Text' key.
+-- | Retrieve optional value in t'Mapping' indexed by a @!!str@ 'Text' key.
 --
 -- 'Nothing' is returned if the key is missing.
 -- This combinator only fails if the key exists but cannot be converted to the required type.
@@ -732,7 +732,7 @@ encodeStrict = bsToStrict . encode
 encode1Strict :: ToYAML v => v -> BS.ByteString
 encode1Strict = bsToStrict . encode1
 
--- | Internal helper
+-- Internal helper
 class Loc loc where
   toUnit :: Functor f => f loc -> f ()
   toUnit = (() <$)
