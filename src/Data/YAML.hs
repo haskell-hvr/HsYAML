@@ -152,19 +152,19 @@ import           Util
 --
 -- And now we can 'decode' the YAML document like so:
 --
--- >>> decode "- name: Erik Weisz\n  age: 52\n  magic: True\n- name: Mina Crandon\n  age: 53" :: Either String [[Person]]
+-- >>> decode "- name: Erik Weisz\n  age: 52\n  magic: True\n- name: Mina Crandon\n  age: 53" :: Either (Pos,String) [[Person]]
 -- Right [[Person {name = "Erik Weisz", age = 52, magic = True},Person {name = "Mina Crandon", age = 53, magic = False}]]
 --
 -- There are predefined 'FromYAML' instance for many types.
 --
 -- The example below shows decoding multiple YAML documents into a list of 'Int' lists:
 --
--- >>> decode "---\n- 1\n- 2\n- 3\n---\n- 4\n- 5\n- 6" :: Either String [[Int]]
+-- >>> decode "---\n- 1\n- 2\n- 3\n---\n- 4\n- 5\n- 6" :: Either (Pos,String) [[Int]]
 -- Right [[1,2,3],[4,5,6]]
 --
 -- If you are expecting exactly one YAML document then you can use convenience function 'decode1'
 --
--- >>> decode1 "- 1\n- 2\n- 3\n" :: Either String [Int]
+-- >>> decode1 "- 1\n- 2\n- 3\n" :: Either (Pos,String) [Int]
 -- Right [1,2,3]
 --
 -- == Working with AST
@@ -173,7 +173,7 @@ import           Util
 --
 -- We can easily do that by using the 'Node' type, which is an instance of 'FromYAML', is used to represent an arbitrary YAML AST (abstract syntax tree). For example,
 --
--- >>> decode1 "Name: Vijay" :: Either String (Node Pos)
+-- >>> decode1 "Name: Vijay" :: Either (Pos,String) (Node Pos)
 -- Right (Mapping (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) Just "tag:yaml.org,2002:map" (fromList [(Scalar (Pos {posByteOffset = 0, posCharOffset = 0, posLine = 1, posColumn = 0}) (SStr "Name"),Scalar (Pos {posByteOffset = 4, posCharOffset = 4, posLine = 1, posColumn = 4}) (SStr "Vijay"))]))
 --
 -- The type parameter 'Pos' is used to indicate the position of each YAML 'Node' in the document.
@@ -213,9 +213,11 @@ fakePos = Pos { posByteOffset = -1 , posCharOffset = -1  , posLine = 1 , posColu
 
 -- | Parse and decode YAML document(s) into 'Node' graphs
 --
--- This is a convenience wrapper over `decodeNode'`
+-- This is a convenience wrapper over `decodeNode'`, i.e.
 --
--- > decodeNode = decodeNode' coreSchemaResolver False False
+-- @
+-- decodeNode = decodeNode' 'coreSchemaResolver' False False
+-- @
 --
 -- In other words,
 --
@@ -527,13 +529,13 @@ instance (FromYAML a, FromYAML b, FromYAML c, FromYAML d, FromYAML e, FromYAML f
 -- the response list. Here's an example of decoding two concatenated
 -- YAML documents:
 --
--- >>> decode "Foo\n---\nBar" :: Either String [Text]
+-- >>> decode "Foo\n---\nBar" :: Either (Pos,String) [Text]
 -- Right ["Foo","Bar"]
 --
 -- Note that an empty stream doesn't contain any (non-comment)
 -- document nodes, and therefore results in an empty result list:
 --
--- >>> decode "# just a comment" :: Either String [Text]
+-- >>> decode "# just a comment" :: Either (Pos,String) [Text]
 -- Right []
 --
 -- 'decode' uses the same settings as 'decodeNode' for tag-resolving. If
@@ -551,13 +553,13 @@ decode bs0 = decodeNode bs0 >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 -- | Convenience wrapper over 'decode' expecting exactly one YAML document
 --
--- >>> decode1 "---\nBar\n..." :: Either String Text
+-- >>> decode1 "---\nBar\n..." :: Either (Pos,String) Text
 -- Right "Bar"
 --
--- >>> decode1 "Foo\n---\nBar" :: Either String Text
+-- >>> decode1 "Foo\n---\nBar" :: Either (Pos,String) Text
 -- Left "unexpected multiple YAML documents"
 --
--- >>> decode1 "# Just a comment" :: Either String Text
+-- >>> decode1 "# Just a comment" :: Either (Pos,String) Text
 -- Left "empty YAML stream"
 --
 -- @since 0.2.0
