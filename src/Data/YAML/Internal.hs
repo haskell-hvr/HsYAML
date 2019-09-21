@@ -22,7 +22,11 @@ import           Data.YAML.Schema.Internal (Scalar (..))
 import           Util
 
 -- | YAML Document tree/graph
-newtype Doc n = Doc { getDoc :: n } deriving (Eq,Ord,Show)
+newtype Doc n = Doc { getDoc :: n } deriving (Eq,Ord,Show,Generic)
+
+-- | @since 0.2.0
+instance NFData n => NFData (Doc n) where
+  rnf (Doc n) = rnf n
 
 -- | YAML mapping
 type Mapping loc = Map (Node loc) (Node loc)
