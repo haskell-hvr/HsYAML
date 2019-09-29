@@ -183,9 +183,9 @@ cmdYaml2Event = do
     Left (ofs,msg) -> do
       hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
       exitFailure
-    Right event -> print (eEvent event)
-      -- hPutStrLn stdout (ev2str True (eEvent event))
-      -- hFlush stdout
+    Right event -> do
+      hPutStrLn stdout (ev2str True (eEvent event))
+      hFlush stdout
 
 cmdYaml2EventPos :: IO ()
 cmdYaml2EventPos = do
@@ -202,13 +202,10 @@ cmdYaml2EventPos = do
       let Pos{..} = ePos event
 
       putStrLn ""
-      putStrLn (show posLine ++ ":" ++ show posColumn ++ ":\t" ++ show (eEvent event))
+      putStrLn (show posLine ++ ":" ++ show posColumn ++ ":\t" ++ ev2str True (eEvent event))
       when (posLine <= maxLine) $ do
         T.putStrLn ("| " <> (inYamlDatLns !! (posLine-1)))
         putStrLn (replicate (posColumn+2) ' ' <> "^")
-
-      -- hPutStrLn stdout (ev2str True (eEvent event))
-      -- hFlush stdout
 
 cmdYaml2Event0 :: IO ()
 cmdYaml2Event0 = do
