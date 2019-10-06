@@ -24,6 +24,7 @@ module Data.YAML.Event.Internal
 
 
 import qualified Data.Text       as T
+import           Data.YAML.Pos   (Pos (..))
 import qualified Data.YAML.Token as Y
 
 import           Util
@@ -175,19 +176,6 @@ instance NFData Tag where rnf (Tag x) = rnf x
 -- immediately once a 'Left' value is returned.
 type EvStream = [Either (Pos,String) EvPos]
 
-
--- | Position in parsed YAML source
---
--- __NOTE__: if 'posCharOffset' is negative the 'Pos' value doesn't refer to a proper location; this may be emitted in corner cases when no proper location can be inferred.
-data Pos = Pos
-    { posByteOffset :: !Int -- ^ 0-based byte offset
-    , posCharOffset :: !Int -- ^ 0-based character (Unicode code-point) offset
-    , posLine       :: !Int -- ^ 1-based line number
-    , posColumn     :: !Int -- ^ 0-based character (Unicode code-point) column number
-    }  deriving (Eq, Show, Generic)
-
--- | @since 0.2.0
-instance NFData Pos where rnf !_ = ()
 
 -- | Convert 'Tag' to its string representation
 --
