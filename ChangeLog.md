@@ -2,7 +2,8 @@ See also http://pvp.haskell.org/faq
 
 ### 0.2.1.0
 
-* Define `Functor Doc` instance [#33](https://github.com/haskell-hvr/HsYAML/issues/33)
+* Define `Functor Doc` instance ([#33](https://github.com/haskell-hvr/HsYAML/issues/33))
+* Export `Pair` `type` synonym from `Data.YAML` ([#31](https://github.com/haskell-hvr/HsYAML/issues/31))
 
 ## 0.2.0.0
 

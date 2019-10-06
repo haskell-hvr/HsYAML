@@ -47,7 +47,8 @@ module Data.YAML
     , encode1Strict
     , ToYAML(..)
 
-      -- ** Accessors for encoding
+      -- ** Accessors for encoding t'Mapping's
+    , Pair
     , mapping
     , (.=)
 
@@ -741,6 +742,11 @@ instance Loc Pos
 
 instance Loc () where toUnit = id
 
+-- | Represents a key-value pair in YAML t'Mapping's
+--
+-- See also '.=' and 'mapping'
+--
+-- @since 0.2.1
 type Pair = (Node (), Node ())
 
 -- | @since 0.2.0
