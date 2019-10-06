@@ -6,7 +6,7 @@ See also http://pvp.haskell.org/faq
 * New `withScalar` function and also define `ToYAML Scalar` and `FromYAML Scalar` instances
 * Export `Pair` `type` synonym from `Data.YAML` ([#31](https://github.com/haskell-hvr/HsYAML/issues/31))
 * New `Data.YAML.prettyPosWithSource` function for pretty-printing source locations (i.e. `Pos` values)
-* Add export 'docRoot :: Doc n -> n` field accessor for convenience ([#32](https://github.com/haskell-hvr/HsYAML/issues/32))
+* Add export `docRoot :: Doc n -> n` field accessor for convenience ([#32](https://github.com/haskell-hvr/HsYAML/issues/32))
 
 ## 0.2.0.0
 
@@ -22,7 +22,7 @@ parsing pipeline for improved error reporting.
         * New functions like `encode`, `encode1`, `encodeStrict`, `encode1Strict` for supporting typeclass-based dumping
         * Some ToYAML instances and other api
     * Modify `typeMismatch` function to show error source location in error messages ([#19](https://github.com/haskell-hvr/HsYAML/pull/19))
-    * Provide location-aware 'failAtNode' alternative to 'fail'
+    * Provide location-aware `failAtNode` alternative to `fail`
 
 * Changes in `Data.YAML.Event` module
     * Preserve and round-trip Comments at Event level([#24](https://github.com/haskell-hvr/HsYAML/pull/24))
