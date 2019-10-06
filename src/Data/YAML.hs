@@ -741,12 +741,10 @@ instance Loc Pos
 
 instance Loc () where toUnit = id
 
-type Pair = (Node (), Node ())
-
 -- | @since 0.2.0
-(.=) :: ToYAML a => Text -> a -> Pair
+(.=) :: ToYAML a => Text -> a -> (Node (), Node ())
 name .= node = (toYAML name, toYAML node)
 
 -- | @since 0.2.0
-mapping :: [Pair] -> Node ()
+mapping :: [(Node (), Node ())] -> Node ()
 mapping = Mapping () tagMap . Map.fromList
