@@ -53,6 +53,7 @@ module Data.YAML
     , (.=)
 
       -- ** Prism-style parsers
+    , withScalar
     , withSeq
     , withBool
     , withFloat
@@ -381,10 +382,20 @@ withNull :: String -> Parser a -> Node Pos -> Parser a
 withNull _        f (Scalar pos SNull) = fixupFailPos pos f
 withNull expected _ v                  = typeMismatch expected v
 
+-- | Operate on t'Scalar' node (or fail)
+--
+-- @since 0.2.1
+withScalar :: String -> (Scalar -> Parser a) -> Node Pos -> Parser a
+withScalar _        f (Scalar pos sca) = fixupFailPos pos (f sca)
+withScalar expected _ v                = typeMismatch expected v
 
 -- | Trivial instance
 instance (loc ~ Pos) => FromYAML (Node loc) where
   parseYAML = pure
+
+-- | @since 0.2.1
+instance FromYAML Scalar where
+  parseYAML = withScalar "scalar" pure
 
 instance FromYAML Bool where
   parseYAML = withBool "!!bool" pure
@@ -658,6 +669,10 @@ instance ToYAML Integer where toYAML = Scalar () . SInt
 
 instance ToYAML Text where
   toYAML = Scalar () . SStr
+
+-- | @since 0.2.1
+instance ToYAML Scalar where
+  toYAML = Scalar ()
 
 instance ToYAML a => ToYAML (Maybe a) where
   toYAML Nothing  = Scalar () SNull

@@ -3,8 +3,9 @@ See also http://pvp.haskell.org/faq
 ### 0.2.1.0
 
 * Define `Functor Doc` instance ([#33](https://github.com/haskell-hvr/HsYAML/issues/33))
+* New `withScalar` function and also define `ToYAML Scalar` and `FromYAML Scalar` instances
 * Export `Pair` `type` synonym from `Data.YAML` ([#31](https://github.com/haskell-hvr/HsYAML/issues/31))
-* New 'Data.YAML.prettyPosWithSource' function for pretty-printing source locations (`Pos`)
+* New `Data.YAML.prettyPosWithSource` function for pretty-printing source locations (i.e. `Pos` values)
 
 ## 0.2.0.0
 
