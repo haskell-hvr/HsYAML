@@ -1,5 +1,9 @@
 See also http://pvp.haskell.org/faq
 
+### 0.2.1.0
+
+* Define `Functor Doc` instance [#33](https://github.com/haskell-hvr/HsYAML/issues/33)
+
 ## 0.2.0.0
 
 This release incorporates the work from [Vijay Tadikamalla's GSOC 2019 Project](https://vijayphoenix.github.io/blog/gsoc-the-conclusion/).
@@ -47,18 +51,18 @@ parsing pipeline for improved error reporting.
 
 ---
 
-### 0.1.1.3
+#### 0.1.1.3
 
 * Fix bug in float regexp being too lax in the JSON and Core schema ([#7](https://github.com/hvr/HsYAML/issues/7))
 * Remove dependency on `dlist`
 
-### 0.1.1.2
+#### 0.1.1.2
 
 * Tolerate BOM at *each* `l-document-prefix` (rather than only at the first one encountered in a YAML stream)
 * Workaround broken `mtl-2.2.2` bundled in GHC 8.4.1 ([#1](https://github.com/hvr/HsYAML/issues/1))
 * Relax to GPL-2.0-or-later
 
-### 0.1.1.1
+#### 0.1.1.1
 
 * Reject (illegal) non-scalar code-points in UTF-32 streams
 * Tolerate BOM at start of stream
