@@ -184,6 +184,35 @@ import           Util
 --
 -- The type parameter 'Pos' is used to indicate the position of each YAML 'Node' in the document.
 -- So using the 'Node' type we can easily decode any YAML document.
+--
+-- == Pretty-printing source locations
+--
+-- Syntax errors or even conversion errors are reported with a source location, e.g.
+--
+-- >>> decode "- name: Erik Weisz\n  age: 52\n  magic: True\n- name: Mina Crandon\n  age: young" :: Either (Pos,String) [[Person]]
+-- Left (Pos {posByteOffset = 71, posCharOffset = 71, posLine = 5, posColumn = 7},"expected !!int instead of !!str")
+--
+-- While accurate this isn't a very convenient error representation. Instead we can use the 'prettyPosWithSource' helper function to create more convenient error report like so
+--
+-- @
+-- readPersons :: FilePath -> IO [Person]
+-- readPersons fname = do
+--    raw <- BS.L.readFile fname
+--    case 'decode1' raw of
+--      Left (loc,emsg) -> do
+--        hPutStrLn stderr (fname ++ ":" ++ 'prettyPosWithSource' loc raw " error" ++ emsg)
+--        pure []
+--      Right persons -> pure persons
+-- @
+--
+-- which will then print errors in a common form such as
+--
+-- > people.yaml:5:7: error
+-- >    |
+-- >  5 |   age: young
+-- >    |        ^
+-- > expected !!int instead of !!str
+--
 
 
 -- | Retrieve value in t'Mapping' indexed by a @!!str@ 'Text' key.
