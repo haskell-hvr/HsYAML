@@ -28,6 +28,10 @@ newtype Doc n = Doc { getDoc :: n } deriving (Eq,Ord,Show,Generic)
 instance NFData n => NFData (Doc n) where
   rnf (Doc n) = rnf n
 
+-- | @since UNRELEASED
+instance Functor Doc where
+  fmap f (Doc n) = Doc (f n)
+
 -- | YAML mapping
 type Mapping loc = Map (Node loc) (Node loc)
 
