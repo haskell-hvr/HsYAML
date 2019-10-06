@@ -42,32 +42,31 @@ instance Show Encoding where
     show UTF32LE = "UTF-32LE"
     show UTF32BE = "UTF-32BE"
 
-
 -- | @since 0.2.0
 instance NFData Encoding where rnf !_ = ()
 
--- | @decode bytes@ automatically detects the 'Encoding' used and converts the
+-- | @'decode' bytes@ automatically detects the 'Encoding' used and converts the
 -- /bytes/ to Unicode characters, with byte offsets. Note the offset is for
 -- past end of the character, not its beginning.
 decode :: BLC.ByteString -> (Encoding, [(Int, Char)])
 decode text = (encoding, undoEncoding encoding text)
-  where encoding = detectEncoding $ BLC.unpack $ BLC.take 4 text
+  where
+    encoding = detectEncoding $ BL.unpack $ BL.take 4 text
 
--- | @detectEncoding text@ examines the first few chars (bytes) of the /text/
+-- | @'detectEncoding' text@ examines the first few chars (bytes) of the /text/
 -- to deduce the Unicode encoding used according to the YAML spec.
-detectEncoding :: [Char] -> Encoding
-detectEncoding text =
-  case text of
-    '\x00' : '\x00' : '\xFE' : '\xFF' : _ -> UTF32BE
-    '\x00' : '\x00' : '\x00' : _      : _ -> UTF32BE
-    '\xFF' : '\xFE' : '\x00' : '\x00' : _ -> UTF32LE
-    _      : '\x00' : '\x00' : '\x00' : _ -> UTF32LE
-    '\xFE' : '\xFF' : _                   -> UTF16BE
-    '\x00' : _      : _                   -> UTF16BE
-    '\xFF' : '\xFE' : _                   -> UTF16LE
-    _      : '\x00' : _                   -> UTF16LE
-    '\xEF' : '\xBB' : '\xBF' : _          -> UTF8
-    _                                     -> UTF8
+detectEncoding :: [Word8] -> Encoding
+detectEncoding text = case text of
+    0x00 : 0x00 : 0xFE : 0xFF : _ -> UTF32BE
+    0x00 : 0x00 : 0x00 : _    : _ -> UTF32BE
+    0xFF : 0xFE : 0x00 : 0x00 : _ -> UTF32LE
+    _    : 0x00 : 0x00 : 0x00 : _ -> UTF32LE
+    0xFE : 0xFF : _               -> UTF16BE
+    0x00 : _    : _               -> UTF16BE
+    0xFF : 0xFE : _               -> UTF16LE
+    _    : 0x00 : _               -> UTF16LE
+    0xEF : 0xBB : 0xBF : _        -> UTF8
+    _                             -> UTF8
 
 -- | @undoEncoding encoding bytes@ converts a /bytes/ stream to Unicode
 -- characters according to the /encoding/.
