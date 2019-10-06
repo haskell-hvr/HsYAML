@@ -22,7 +22,11 @@ import           Data.YAML.Schema.Internal (Scalar (..))
 import           Util
 
 -- | YAML Document tree/graph
-newtype Doc n = Doc { getDoc :: n } deriving (Eq,Ord,Show,Generic)
+--
+-- __NOTE__: In future versions of this API meta-data about the YAML document might be included as additional fields inside 'Doc'
+newtype Doc n = Doc
+   { docRoot :: n -- ^ @since 0.2.1
+   } deriving (Eq,Ord,Show,Generic)
 
 -- | @since 0.2.0
 instance NFData n => NFData (Doc n) where

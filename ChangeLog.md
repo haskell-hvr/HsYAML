@@ -6,6 +6,7 @@ See also http://pvp.haskell.org/faq
 * New `withScalar` function and also define `ToYAML Scalar` and `FromYAML Scalar` instances
 * Export `Pair` `type` synonym from `Data.YAML` ([#31](https://github.com/haskell-hvr/HsYAML/issues/31))
 * New `Data.YAML.prettyPosWithSource` function for pretty-printing source locations (i.e. `Pos` values)
+* Add export 'docRoot :: Doc n -> n` field accessor for convenience ([#32](https://github.com/haskell-hvr/HsYAML/issues/32))
 
 ## 0.2.0.0
 

@@ -40,7 +40,7 @@ encodeNode = encodeNode' coreSchemaEncoder UTF8
 --
 -- @since 0.2.0
 encodeNode' :: SchemaEncoder -> Encoding -> [Doc (Node ())] -> BS.L.ByteString
-encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEvent (dumpEvents (map getDoc nodes))
+encodeNode' SchemaEncoder{..} encoding nodes = writeEvents encoding $ map getEvent (dumpEvents (map docRoot nodes))
   where
 
     getEvent :: Either String Event -> Event

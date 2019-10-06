@@ -67,7 +67,7 @@ module Data.YAML
     , decodeNode'
     , encodeNode
     , encodeNode'
-    , Doc(Doc)
+    , Doc(Doc,docRoot)
     , Node(..)
     , Scalar(..)
 
