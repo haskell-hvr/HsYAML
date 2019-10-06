@@ -25,7 +25,7 @@ import qualified Data.ByteString.Lazy.Char8 as BLC
 
 import           Util
 
--- | Recognized Unicode encodings. As of YAML 1.2 UTF-32 is also required.
+-- | Denotes the /Unicode Transformation Format/ (UTF) used for serializing the YAML document
 data Encoding = UTF8    -- ^ UTF-8 encoding (or ASCII)
               | UTF16LE -- ^ UTF-16 little endian
               | UTF16BE -- ^ UTF-16 big endian

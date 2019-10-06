@@ -692,8 +692,7 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
   toYAML (a,b,c,d,e,f,g) = toYAML [toYAML a, toYAML b, toYAML c, toYAML d, toYAML e, toYAML f, toYAML g]
 
 
-
--- | Serialize YAML Node(s) using the YAML 1.2 Core schema to a lazy 'BS.L.ByteString'.
+-- | Serialize YAML Node(s) using the YAML 1.2 Core schema to a lazy 'Data.YAML.Token.UTF8' encoded 'BS.L.ByteString'.
 --
 -- Each YAML Node produces exactly one YAML Document.
 --
@@ -707,7 +706,7 @@ instance (ToYAML a, ToYAML b, ToYAML c, ToYAML d, ToYAML e, ToYAML f, ToYAML g) 
 -- >>> encode ([["Document 1", "Document 2"]] :: [[Text]])
 -- "- Document 1\n- Document 2\n"
 --
--- Alternatively, if you only need a single YAML document in a YAML stream you might want to use the convenience function 'encode1'.
+-- Alternatively, if you only need a single YAML document in a YAML stream you might want to use the convenience function 'encode1'; or, if you need more control over the encoding, see 'encodeNode''.
 --
 -- @since 0.2.0
 encode :: ToYAML v => [v] -> BS.L.ByteString

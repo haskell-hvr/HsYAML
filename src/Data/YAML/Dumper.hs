@@ -24,7 +24,7 @@ import qualified Data.Text                 as T
 type EvList = [Either String Event]
 type Node2EvList = [Node ()] -> EvList
 
--- | Dump YAML Nodes as a lazy 'BS.L.ByteString'
+-- | Dump YAML Nodes as a lazy 'UTF8' encoded 'BS.L.ByteString'
 --
 -- Each YAML 'Node' is emitted as a individual YAML Document where each Document is terminated by a 'DocumentEnd' indicator.
 --
@@ -35,6 +35,8 @@ encodeNode :: [Doc (Node ())] -> BS.L.ByteString
 encodeNode = encodeNode' coreSchemaEncoder UTF8
 
 -- | Customizable variant of 'encodeNode'
+--
+-- __NOTE__: A leading <https://en.wikipedia.org/wiki/Byte_order_mark BOM> will be emitted for all encodings /other than/ 'UTF8'.
 --
 -- @since 0.2.0
 encodeNode' :: SchemaEncoder -> Encoding -> [Doc (Node ())] -> BS.L.ByteString

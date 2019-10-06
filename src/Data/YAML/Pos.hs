@@ -19,6 +19,8 @@ import           Util
 
 -- | Position in parsed YAML source
 --
+-- See also 'prettyPosWithSource'.
+--
 -- __NOTE__: if 'posCharOffset' is negative the 'Pos' value doesn't refer to a proper location; this may be emitted in corner cases when no proper location can be inferred.
 data Pos = Pos
     { posByteOffset :: !Int -- ^ 0-based byte offset
