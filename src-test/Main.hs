@@ -196,16 +196,12 @@ cmdYaml2EventPos = do
 
   forM_ (parseEvents inYamlDat) $ \ev -> case ev of
     Left (ofs,msg) -> do
-      hPutStrLn stderr ("Parsing error near byte offset " ++ show ofs ++ if null msg then "" else " (" ++ msg ++ ")")
+      hPutStrLn stderr (prettyPosWithSource ofs inYamlDat (" error [" ++ show ofs ++ "]") ++ msg)
       exitFailure
     Right event -> do
       let Pos{..} = ePos event
 
-      putStrLn ""
-      putStrLn (show posLine ++ ":" ++ show posColumn ++ ":\t" ++ ev2str True (eEvent event))
-      when (posLine <= maxLine) $ do
-        T.putStrLn ("| " <> (inYamlDatLns !! (posLine-1)))
-        putStrLn (replicate (posColumn+2) ' ' <> "^")
+      putStrLn (prettyPosWithSource (ePos event) inYamlDat ("\t" ++ ev2str True (eEvent event)))
 
 cmdYaml2Event0 :: IO ()
 cmdYaml2Event0 = do

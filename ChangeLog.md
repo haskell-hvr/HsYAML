@@ -4,6 +4,7 @@ See also http://pvp.haskell.org/faq
 
 * Define `Functor Doc` instance ([#33](https://github.com/haskell-hvr/HsYAML/issues/33))
 * Export `Pair` `type` synonym from `Data.YAML` ([#31](https://github.com/haskell-hvr/HsYAML/issues/31))
+* New 'Data.YAML.prettyPosWithSource' function for pretty-printing source locations (`Pos`)
 
 ## 0.2.0.0
 

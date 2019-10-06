@@ -69,7 +69,10 @@ module Data.YAML
     , Doc(Doc)
     , Node(..)
     , Scalar(..)
+
+      -- * Source locations
     , Pos(..)
+    , prettyPosWithSource
 
       -- * YAML 1.2 Schema resolvers
       --
@@ -102,9 +105,10 @@ import qualified Data.Map                  as Map
 import qualified Data.Text                 as T
 
 import           Data.YAML.Dumper
-import           Data.YAML.Event           (Pos (..), isUntagged, tagToText)
+import           Data.YAML.Event           (isUntagged, tagToText)
 import           Data.YAML.Internal
 import           Data.YAML.Loader
+import           Data.YAML.Pos
 import           Data.YAML.Schema.Internal
 
 import           Util
