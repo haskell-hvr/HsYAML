@@ -32,8 +32,8 @@ import qualified Data.Text.Encoding         as T
 import qualified Data.Text.IO               as T
 
 import           Data.YAML                  as Y
-import           Data.YAML.Schema           as Y
 import           Data.YAML.Event            as YE
+import           Data.YAML.Schema           as Y
 import qualified Data.YAML.Token            as YT
 
 import qualified TML
@@ -98,7 +98,7 @@ main = do
           exitFailure
 
     ("yaml2yaml-dump": args')
-      | null args' -> cmdDumpYAML 
+      | null args' -> cmdDumpYAML
       | otherwise  -> do
           hPutStrLn stderr "unexpected arguments passed to yaml2event sub-command"
           exitFailure
@@ -210,7 +210,7 @@ cmdYaml2Event0 = do
   where
     parseEvents' = map (either (\(ofs,msg) -> error ("parsing error near byte offset " ++ show ofs ++ " (" ++ msg ++ ")")) id) . parseEvents
 
-cmdYaml2YamlVal :: IO() 
+cmdYaml2YamlVal :: IO()
 cmdYaml2YamlVal = do
   inYamlDat <- BS.L.getContents
   case sequence $ parseEvents inYamlDat of
@@ -228,8 +228,8 @@ cmdYaml2YamlVal = do
         Right newEvents -> do
           hPutStrLn stdout $ printf "\nInput  Event Stream Length: %d\nOutput Event Stream Length: %d\n" (length oldEvents) (length newEvents)
           let diffList = filter (uncurry (/=)) $ zipWith (\a b -> (eEvent a, eEvent b)) oldEvents newEvents
-          hPutStrLn stdout $ printf "No of difference detected: %d\n" $ length diffList 
-          forM_ diffList $ \(old,new) -> do 
+          hPutStrLn stdout $ printf "No of difference detected: %d\n" $ length diffList
+          forM_ diffList $ \(old,new) -> do
             hPutStrLn stdout $ "Input  > " ++ show old
             hPutStrLn stdout $ "Output < " ++ show new
 
@@ -309,7 +309,7 @@ decodeAeson = fmap (map toProperValue) . decode'
     -- TODO
     decode' :: FromYAML v => BS.L.ByteString -> Either (Pos,String) [v]
     decode' bs0 = case decodeNode' coreSchemaResolver { schemaResolverMappingDuplicates = True } False False bs0 of
-                  Left (pos, err) -> Left (pos, err) 
+                  Left (pos, err) -> Left (pos, err)
                   Right a         -> Right a >>= mapM (parseEither . parseYAML . (\(Doc x) -> x))
 
 
@@ -413,7 +413,7 @@ cmdRunTml args = do
 
         Right evs' -> do
           let events = map eEvent evs'
-              evs'' = map (ev2str False) events 
+              evs'' = map (ev2str False) events
           if evs'' == testEvDat
              then do
 
@@ -569,7 +569,7 @@ cmdRunTml' args = do
 
         Right evs' -> do
           let events = map eEvent (filter (not. isComment'. eEvent) evs')                     -- filter comments before comparing
-              evs'' = map (ev2str False) events 
+              evs'' = map (ev2str False) events
           if evs'' == testEvDat
              then do
                let outYamlDatIut = writeEvents YT.UTF8 (map eEvent evs')                -- Allow both block and flow style
@@ -693,32 +693,32 @@ putStrLn' :: String -> IO ()
 putStrLn' msg = putStrLn ("  " ++ msg)
 
 printNode :: Node loc -> IO ()
-printNode node = case node of  
+printNode node = case node of
     (Y.Scalar _ a)      -> hPutStrLn stdout $  "Scalar "   ++ show a
     (Y.Mapping _ a b)   -> do
-                              hPutStrLn stdout $  "Mapping "  ++ show a 
+                              hPutStrLn stdout $  "Mapping "  ++ show a
                               printMap b
-    (Y.Sequence _ a b)  -> do 
-                              hPutStrLn stdout $  "Sequence " ++ show a 
+    (Y.Sequence _ a b)  -> do
+                              hPutStrLn stdout $  "Sequence " ++ show a
                               mapM_ printNode b
     (Y.Anchor _ a b)    -> do
                               hPutStr stdout $  "Anchor "   ++ show a ++ " "
                               printNode b
 
 printMap :: Map (Node loc) (Node loc) -> IO ()
-printMap b = forM_ (Map.toList b) $ \(k,v) -> do 
+printMap b = forM_ (Map.toList b) $ \(k,v) -> do
               hPutStr stdout "Key: "
-              printNode k 
+              printNode k
               hPutStr stdout "Value: "
               printNode v
 
 isComment evPos = case evPos of
   Right (YE.EvPos {eEvent = (YE.Comment _), ePos = _}) -> True
-  _ -> False 
+  _                                                    -> False
 
 isComment' ev = case ev of
   (Comment _) -> True
-  _ -> False 
+  _           -> False
 
 ev2str :: Bool -> Event -> String
 ev2str withColSty = \case
