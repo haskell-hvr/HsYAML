@@ -40,12 +40,11 @@ import           System.Environment
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
-import           Text.Megaparsec.Expr
 
 type Parser = Parsec Void T.Text
 
 parse :: String -> T.Text -> Either T.Text Document
-parse fn raw = either (Left . T.pack . parseErrorPretty' raw)
+parse fn raw = either (Left . T.pack . errorBundlePretty)
                       (Right .process_pseudo)
                       (Text.Megaparsec.parse testml_document fn raw)
 
@@ -318,7 +317,7 @@ data_section = many block_definition
     block_definition = do
       -- block_heading
       string "===" *> ws
-      l <- T.pack <$> manyTill anyChar eol
+      l <- T.pack <$> manyTill anySingle eol
 
       -- TODO: user_defined
       ps <- many point_definition
@@ -333,7 +332,7 @@ data_section = many block_definition
 
       let single = do
             _ <- char ':' *> ws
-            x <- T.pack <$> manyTill anyChar eol
+            x <- T.pack <$> manyTill anySingle eol
             -- consume and ignore any point_lines
             _ <- point_lines
             pure $! case j of
@@ -358,7 +357,7 @@ data_section = many block_definition
 point_lines :: Parser T.Text
 point_lines = T.pack . unlines <$> go
   where
-    go = many (notFollowedBy point_boundary *> manyTill anyChar eol)
+    go = many (notFollowedBy point_boundary *> manyTill anySingle eol)
 
     point_boundary :: Parser ()
     point_boundary = void (string "---") <|> void (string "===") <|> eof
