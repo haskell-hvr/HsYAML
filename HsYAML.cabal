@@ -138,6 +138,6 @@ test-suite tests
                  , containers
                  , mtl
                    -- non-inherited
-                 , QuickCheck == 2.13.*
+                 , QuickCheck >= 2.13 && < 2.15
                  , tasty == 1.2.*
                  , tasty-quickcheck == 0.10.*
