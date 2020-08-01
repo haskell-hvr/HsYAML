@@ -152,6 +152,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         MappingStart  anc tag sty    -> goMap (n+1) sol (chn sty) anc tag sty rest cont
         Alias a                      -> pfx <> goAlias c a (cont rest)
         Comment com                  -> goComment (n+1) sol c com (go n sol c rest cont)
+        EmptyLine                    -> "\n" <> go n sol c rest cont
         _ -> error ("putNode: expected node-start event instead of " ++ show t)
 
       where
@@ -178,6 +179,7 @@ putNode = \docMarker -> go (-1 :: Int) (not docMarker) BlockIn
         g' (MappingEnd : rest) = cont rest                    -- All comments should be part of the key
         g' ys                  = pfx <> putKey ys putValue'
 
+        g (EmptyLine : rest)  = "\n" <> g rest
         g (Comment com: rest) = goComment n True c' com (g rest)  -- For trailing comments
         g (MappingEnd : rest) = cont rest
         g ys                  = pfx <> putKey ys putValue'

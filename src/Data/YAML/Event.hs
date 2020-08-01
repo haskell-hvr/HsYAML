@@ -139,7 +139,7 @@ fixUpEOS = go initPos
 -- (which will be auto-detected).
 --
 parseEvents :: BS.L.ByteString -> EvStream
-parseEvents = \bs0 -> fixUpEOS $ Right (EvPos StreamStart initPos) : (go0 $ filter (not . isWhite) $ Y.tokenize bs0 False)
+parseEvents = \bs0 -> fixUpEOS $ Right (EvPos StreamStart initPos) : (go0 $ removeNoise $ Y.tokenize bs0 False)
   where
     isTCode tc = (== tc) . Y.tCode
     skipPast tc (t : ts)
@@ -147,14 +147,22 @@ parseEvents = \bs0 -> fixUpEOS $ Right (EvPos StreamStart initPos) : (go0 $ filt
       | otherwise = skipPast tc ts
     skipPast _ [] = error "the impossible happened"
 
+    -- removeNoise
+    removeNoise = removeRegularBreak . filter (not . isWhite)
+
     -- non-content whitespace
     isWhite :: Y.Token -> Bool
     isWhite (Y.Token { Y.tCode = Y.Bom   })  = True -- BOMs can occur at each doc-start!
     isWhite (Y.Token { Y.tCode = Y.White })  = True
     isWhite (Y.Token { Y.tCode = Y.Indent }) = True
-    isWhite (Y.Token { Y.tCode = Y.Break })  = True
     isWhite _                                = False
 
+    -- non-content break
+    removeRegularBreak :: [Y.Token] -> [Y.Token]
+    removeRegularBreak [] = []
+    removeRegularBreak (Y.Token { Y.tCode = Y.Break } : x@Y.Token { Y.tCode = Y.Break } : xs) = x : removeRegularBreak xs
+    removeRegularBreak (Y.Token { Y.tCode = Y.Break } : xs) = removeRegularBreak xs
+    removeRegularBreak (x : xs) = x : removeRegularBreak xs
 
     go0 :: Tok2EvStream
     go0 []                                                = [Right (EvPos StreamEnd initPos {- fixed up by fixUpEOS -} )]
@@ -445,6 +453,7 @@ goNode0 DInfo {..} = goNode
 
     goPairEnd toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) cont = goComment toks0 (flip goPairEnd cont)
     goPairEnd (Y.Token { Y.tCode = Y.EndPair } : rest) cont = cont rest
+    goPairEnd (tok@(Y.Token { Y.tCode = Y.Break }) : rest) cont = Right (getEvPos EmptyLine tok) : goPairEnd rest cont
     goPairEnd xs _cont                                      = err xs
 
 

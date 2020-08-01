@@ -52,6 +52,7 @@ import           Util
 data Event
     = StreamStart
     | StreamEnd
+    | EmptyLine
     | DocumentStart  !Directives
     | DocumentEnd    !Bool
     | Comment        !Text
@@ -67,6 +68,7 @@ data Event
 instance NFData Event where
   rnf  StreamStart          = ()
   rnf  StreamEnd            = ()
+  rnf  EmptyLine            = ()
   rnf (DocumentStart _)     = ()
   rnf (DocumentEnd _)       = ()
   rnf (Comment _)           = ()
