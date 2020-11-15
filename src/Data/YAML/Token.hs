@@ -551,7 +551,7 @@ parser ?! decision = peek parser *> commit decision
 (>?) :: (Match match result) => match -> Parser result
 (>?) lookahead = peek lookahead
 
--- | @lookahead >?@ matches the current point without consuming any characters
+-- | @lookahead >! matches the current point without consuming any characters
 -- if it matches the lookahead parser (negative lookahead)
 (>!) :: (Match match result) => match -> Pattern
 (>!) lookahead = reject lookahead Nothing
