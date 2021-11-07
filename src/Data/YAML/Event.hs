@@ -669,7 +669,7 @@ unescape _ = Nothing
 --
 -- Round-tripping at event-level will preserve all the comments and their relative position in the YAML-document but still,
 -- we lose some information like the exact indentation and the position at which the comments were present previously.
--- This information sometimes can be quiet important for human-perception of comments.
+-- This information sometimes can be quite important for human-perception of comments.
 -- Below are some guildlines, so that you can avoid ambiguities.
 --
 -- 1) Always try to start your comment in a newline. This step will avoid most of the ambiguities.
