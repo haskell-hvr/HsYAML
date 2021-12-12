@@ -1,4 +1,0 @@
-packages: .
-
-package HsYAML
-  flags: +exe
