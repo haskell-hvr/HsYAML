@@ -16,6 +16,7 @@ module Data.YAML.Loader
     , NodeId
     ) where
 
+import           Control.Monad.Fix    (MonadFix)
 import           Control.Monad.State
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map             as Map
