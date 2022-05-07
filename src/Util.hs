@@ -33,8 +33,9 @@ import           Data.Word                    as X
 import           GHC.Generics                 as X (Generic)
 import           Numeric.Natural              as X (Natural)
 
-import           Control.Monad.Except         as X (ExceptT (..), MonadError (..), runExceptT)
+import           Control.Monad.Except         as X (MonadError (..))
 import           Control.Monad.Identity       as X
+import           Control.Monad.Trans.Except   as X (ExceptT (..), runExceptT)
 
 import           Data.Char                    as X (chr, ord)
 import           Data.Map                     as X (Map)
