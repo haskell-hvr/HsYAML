@@ -16,7 +16,7 @@ copyright:           2015-2018 Herbert Valerio Riedel
 category:            Text
 build-type:          Simple
 tested-with:
-  GHC == 9.2.1
+  GHC == 9.2.2
   GHC == 9.0.2
   GHC == 8.10.7
   GHC == 8.8.4
