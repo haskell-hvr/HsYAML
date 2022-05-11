@@ -1,16 +1,15 @@
 cabal-version:       1.14
 name:                HsYAML
-version:             0.2.1.0
-x-revision:          4
+version:             0.2.1.1
 
 synopsis:            Pure Haskell YAML 1.2 processor
-homepage:            https://github.com/hvr/HsYAML
-bug-reports:         https://github.com/hvr/HsYAML/issues
+homepage:            https://github.com/haskell-hvr/HsYAML
+bug-reports:         https://github.com/haskell-hvr/HsYAML/issues
 license:             GPL-2
 X-SPDX-License-Identifier: GPL-2.0-or-later
 license-files:       LICENSE.GPLv2 LICENSE.GPLv3
 author:              Herbert Valerio Riedel
-maintainer:          hvr@gnu.org
+maintainer:          https://github.com/haskell-hvr/HsYAML
 copyright:           2015-2018 Herbert Valerio Riedel
                    , 2007-2008 Oren Ben-Kiki
 category:            Text
@@ -51,7 +50,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/hvr/HsYAML.git
+  location: https://github.com/haskell-hvr/HsYAML.git
 
 flag exe
   description: Enable @exe:yaml-test@ component
@@ -90,24 +89,24 @@ library
                        Trustworthy
                        TypeSynonymInstances
 
-  build-depends:       base         >=4.5   && <4.17
-                     , bytestring   >=0.9   && <0.12
-                     , containers   >=0.4.2 && <0.7
-                     , deepseq      >=1.3.0 && <1.5
-                     , text         >=1.2.3 && <2.1
-                     , mtl          >=2.2.1 && <2.4
-                     , parsec       >=3.1.13.0 && < 3.2
-                     , transformers >=0.4   && <0.7
+  build-depends:       base         >= 4.5      && < 4.17
+                     , bytestring   >= 0.9      && < 0.12
+                     , containers   >= 0.4.2    && < 0.7
+                     , deepseq      >= 1.3.0    && < 1.5
+                     , text         >= 1.2.3    && < 2.1
+                     , mtl          >= 2.2.1    && < 2.4
+                     , parsec       >= 3.1.13.0 && < 3.2
+                     , transformers >= 0.4      && < 0.7
 
   -- for GHC.Generics
   if impl(ghc < 7.6)
     build-depends: ghc-prim
 
   if !impl(ghc >= 8.0)
-    build-depends:     fail         >=4.9.0.0 && <4.10
+    build-depends:     fail         >= 4.9.0.0  && < 4.10
 
   if !impl(ghc >= 7.10)
-    build-depends:     nats         >=1.1.2 && <1.2
+    build-depends:     nats         >= 1.1.2    && < 1.2
 
   ghc-options:         -Wall
 

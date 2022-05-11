@@ -1,5 +1,12 @@
 See also http://pvp.haskell.org/faq
 
+### 0.2.1.1
+
+_2022-05-11_
+
+* Compatibility with `mtl-2.3`
+* Tested with GHC 7.4 - 9.2
+
 ### 0.2.1.0
 
 * Define `Functor Doc` instance ([#33](https://github.com/haskell-hvr/HsYAML/issues/33))
