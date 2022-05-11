@@ -409,7 +409,6 @@ goNode0 DInfo {..} = goNode
           | ii, hasLeadingSpace acc = [Left (tok2pos t, "leading empty lines contain more spaces than the first non-empty line in scalar: " ++ show acc)]
           | otherwise = Right (EvPos (Scalar manchor tag sty (T.pack acc)) pos0) : cont rest
 
-        go' _ _ _ xs | False = error (show xs)
         go' _ _ _ xs = err xs
 
         hasLeadingSpace (' ':_)   = True

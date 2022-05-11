@@ -33,6 +33,7 @@ import           Data.Word                    as X
 import           GHC.Generics                 as X (Generic)
 import           Numeric.Natural              as X (Natural)
 
+import           Control.Monad.Fix            as X (MonadFix)
 import           Control.Monad.Except         as X (MonadError (..))
 import           Control.Monad.Identity       as X
 import           Control.Monad.Trans.Except   as X (ExceptT (..), runExceptT)
