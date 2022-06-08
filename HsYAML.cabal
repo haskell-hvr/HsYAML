@@ -76,6 +76,7 @@ library
                      , Data.DList
 
   default-language:    Haskell2010
+  default-extensions:  TypeOperators
   other-extensions:    DeriveGeneric
                        FlexibleContexts
                        FlexibleInstances
