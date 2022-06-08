@@ -2,13 +2,3 @@ packages: .
 
 package HsYAML
   flags: +exe
-
-allow-newer: microaeson:base
-allow-newer: scientific:base
-allow-newer: scientific:template-haskell
-allow-newer: hashable:base
-allow-newer: hashable:ghc-bignum
-allow-newer: integer-logarithms:base
-allow-newer: integer-logarithms:ghc-bignum
-allow-newer: integer-logarithms:ghc-prim
-allow-newer: microaeson:text
