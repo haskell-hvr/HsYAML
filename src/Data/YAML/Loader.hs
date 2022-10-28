@@ -16,7 +16,9 @@ module Data.YAML.Loader
     , NodeId
     ) where
 
-import           Control.Monad.State
+import           Control.Monad.State  (MonadState(..), gets, modify,
+                                       StateT, evalStateT, state)
+import           Control.Monad.Trans  (MonadTrans(..))
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Map             as Map
 import qualified Data.Set             as Set

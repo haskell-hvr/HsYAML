@@ -1,1 +1,7 @@
-installed: +all -binary -bytestring -transformers
+installed: +all -binary -bytestring -transformers -text
+
+constraint-set mtl-2.3
+  ghc: >=8.6
+  constraints: mtl ^>=2.3
+  tests: True
+  run-tests: True

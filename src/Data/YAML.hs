@@ -118,7 +118,7 @@ import           Util
 --
 -- The diagram below depicts the standard layers of a [YAML 1.2](http://yaml.org/spec/1.2/spec.html) processor. This module covers the upper /Native/ and /Representation/ layers, whereas the "Data.YAML.Event" and "Data.YAML.Token" modules provide access to the lower /Serialization/ and /Presentation/ layers respectively.
 --
--- <<http://yaml.org/spec/1.2/overview2.png>>
+-- <<https://yaml.org/spec/1.2.2/img/overview2.svg>>
 --
 -- $start
 --
