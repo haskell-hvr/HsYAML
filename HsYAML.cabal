@@ -152,5 +152,6 @@ test-suite tests
                  , mtl
                    -- non-inherited
                  , QuickCheck == 2.14.*
+                 , scientific
                  , tasty == 1.4.*
                  , tasty-quickcheck == 0.10.*

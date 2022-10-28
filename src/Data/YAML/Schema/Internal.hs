@@ -449,15 +449,11 @@ coreSchemaEncoder = SchemaEncoder{..}
 encodeBool :: Bool -> T.Text
 encodeBool b = if b then "true" else "false"
 
--- | Encode Double
+-- | Encode Scientific
 --
 -- @since 0.2.0
 encodeDouble :: Scientific -> T.Text
-encodeDouble d
-  | d /= d      = ".nan"
-  | d == (1/0)  = ".inf"
-  | d == (-1/0) = "-.inf"
-  | otherwise   = T.pack . show $ d
+encodeDouble d = T.pack . show $ d
 
 -- | Encode Integer
 --
