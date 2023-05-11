@@ -1,3 +1,5 @@
+branches: master ci-* release*
+
 installed: +all -binary -bytestring -transformers -text
 
 constraint-set mtl-2.3
