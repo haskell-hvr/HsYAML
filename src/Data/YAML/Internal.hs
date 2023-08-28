@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE Safe          #-}
 
 -- |
 -- Copyright: © Herbert Valerio Riedel 2015-2018
