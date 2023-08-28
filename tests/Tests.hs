@@ -3,6 +3,7 @@
 
 import           Control.Monad
 import           Control.Applicative
+import           Data.Scientific
 import           Data.YAML                  as Y
 import qualified Data.Text                  as T
 import qualified Data.Map                   as Map
@@ -21,26 +22,11 @@ roundTripBool b
   | b = "true"  == outputStr b
   | otherwise = "false" == outputStr b
 
-roundTripDouble :: Double -> Double -> Bool
-roundTripDouble num denom
-    | d /= d      = ".nan"  == outputStr d
-    | d == (1/0)  = ".inf"  == outputStr d
-    | d == (-1/0) = "-.inf" == outputStr d
-    | otherwise    = BS.L.pack (show d) == outputStr d
-  where d = num / denom
-
 roundTrip :: (Eq a, FromYAML a, ToYAML a) => (a -> a -> Bool) -> a -> a -> Bool
 roundTrip eq _ v =
     case decode1 (encode1 v) :: (FromYAML a) => (Either (Pos, String) a) of
       Left _    -> False
       Right ans -> ans `eq` v
-
-approxEq :: Double -> Double -> Bool
-approxEq a b = a == b || d < maxAbsoluteError || d / max (abs b) (abs a) <= maxRelativeError
-    where 
-      d = abs (a - b)
-      maxAbsoluteError = 1e-15
-      maxRelativeError = 1e-15
 
 roundTripEq :: (Eq a, FromYAML a, ToYAML a) => a -> a -> Bool
 roundTripEq x y = roundTrip (==) x y
@@ -53,19 +39,21 @@ tests =
   [ testGroup "encode" 
     [ testProperty "encodeInt" roundTripInt
     , testProperty "encodeBool" roundTripBool
-    , testProperty "encodeDouble" roundTripDouble
     ]
   , testGroup "roundTrip" 
-    [ testProperty "Bool"    $ roundTripEq True
-    , testProperty "Double"  $ roundTrip approxEq (1::Double)
-    , testProperty "Int"     $ roundTripEq (1::Int)
-    , testProperty "Integer" $ roundTripEq (1::Integer)
-    , testProperty "Text"    $ roundTripEq T.empty
-    , testProperty "Seq"     $ roundTripEq ([""]:: [T.Text])
-    , testProperty "Map"     $ roundTripEq (undefined :: Map.Map T.Text T.Text)
-    , testProperty "Foo"     $ roundTripEq (undefined :: Foo)
+    [ testProperty "Bool"       $ roundTripEq True
+    , testProperty "Int"        $ roundTripEq (1::Int)
+    , testProperty "Integer"    $ roundTripEq (1::Integer)
+    , testProperty "Scientific" $ roundTripEq (1::Scientific)
+    , testProperty "Text"       $ roundTripEq T.empty
+    , testProperty "Seq"        $ roundTripEq ([""]:: [T.Text])
+    , testProperty "Map"        $ roundTripEq (undefined :: Map.Map T.Text T.Text)
+    , testProperty "Foo"        $ roundTripEq (undefined :: Foo)
     ]
   ]
+
+instance Arbitrary Scientific where
+  arbitrary = scientific <$> arbitrary <*> arbitrary
 
 instance Arbitrary T.Text where
   arbitrary = T.pack <$> arbitrary
