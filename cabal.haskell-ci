@@ -1,10 +1,13 @@
 branches: master ci-* release*
 
-installed: +all -binary -bytestring -transformers -text
+-- Dropping building tests on GHC 7.x which ships a too old bytestring package.
+-- installed: +all -binary -bytestring -transformers -text
+tests: >=8.0
+installed: +all
 
-constraint-set mtl-2.3
-  ghc: >=8.6
-  constraints: mtl ^>=2.3
+constraint-set text-2.1
+  ghc: >=8.2
+  constraints: text ^>=2.1
   tests: True
   run-tests: True
 
@@ -14,6 +17,7 @@ constraint-set bytestring-0.12
   tests: True
   run-tests: True
 
--- For constraint-set bytestring-0.12
+-- For constraint-sets
 raw-project
   allow-newer: bytestring
+  allow-newer: text
