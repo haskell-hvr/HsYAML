@@ -1,5 +1,13 @@
 See also http://pvp.haskell.org/faq
 
+### 0.2.1.2
+
+_2023-09-29_
+
+* Add `default-extensions: TypeOperators` to silence warning under GHC ≥ 9.4.
+* Support latest versions of dependencies.
+* Tested with GHC 7.10 - 9.8.0
+
 ### 0.2.1.1
 
 _2022-05-11_
