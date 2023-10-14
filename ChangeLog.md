@@ -1,5 +1,12 @@
 See also http://pvp.haskell.org/faq
 
+### 0.2.1.3
+
+_2023-10-14_
+
+* Pacify `x-partial` warning of GHC 9.8
+* Tested with GHC 7.10 - 9.8.1
+
 ### 0.2.1.2
 
 _2023-09-29_

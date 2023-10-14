@@ -1,6 +1,6 @@
 cabal-version:       1.14
 name:                HsYAML
-version:             0.2.1.2
+version:             0.2.1.3
 
 synopsis:            Pure Haskell YAML 1.2 processor
 homepage:            https://github.com/haskell-hvr/HsYAML
