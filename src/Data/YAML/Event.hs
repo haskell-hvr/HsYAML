@@ -174,13 +174,19 @@ parseEvents = \bs0 -> fixUpEOS $ Right (EvPos StreamStart initPos) : (go0 $ filt
 
     -- consume {Begin,End}Directives and emit DocumentStart event
     goDirs :: DInfo -> Tok2EvStream
-    goDirs m (Y.Token { Y.tCode = Y.BeginDirective } : rest) = goDir1 m rest
-    goDirs m toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) = goComment toks0 (goDirs m)
+    goDirs m (Y.Token { Y.tCode = Y.BeginDirective } : rest) =
+      goDir1 m rest
+    goDirs m toks0@(Y.Token { Y.tCode = Y.BeginComment} : _) =
+      goComment toks0 (goDirs m)
     goDirs m (tok@Y.Token { Y.tCode = Y.DirectivesEnd } : rest)
       | Just (1,mi) <- diVer m = Right (getEvPos (DocumentStart (DirEndMarkerVersion mi)) tok) : go1 m rest
       | otherwise              = Right (getEvPos (DocumentStart DirEndMarkerNoVersion) tok) : go1 m rest
-    goDirs _ xs@(Y.Token { Y.tCode = Y.BeginDocument } : _) = err xs
-    goDirs m xs = Right ( getEvPos (DocumentStart NoDirEndMarker) (head xs) ): go1 m xs
+    goDirs _ xs@(Y.Token { Y.tCode = Y.BeginDocument } : _) =
+      err xs
+    goDirs m xs@(tok : _) =
+      Right (getEvPos (DocumentStart NoDirEndMarker) tok) : go1 m xs
+    goDirs _ xs =
+      err xs
 
     -- single directive
     goDir1 :: DInfo -> [Y.Token] -> EvStream

@@ -146,7 +146,7 @@ cmdYaml2Token = do
     forM_  lgrp $ \YT.Token{..} -> do
       let tText' | null tText = ""
                  | any (== ' ') tText = replicate tLineChar ' ' ++ show tText
-                 | otherwise  = replicate (tLineChar+1) ' ' ++ tail (init (show tText))
+                 | otherwise  = replicate (tLineChar+1) ' ' ++ drop 1 (init (show tText))
       hPutStrLn stdout $ printf "<stdin>:%d:%d: %-15s| %s" tLine tLineChar (show tCode) tText'
     hPutStrLn stdout ""
   hFlush stdout
