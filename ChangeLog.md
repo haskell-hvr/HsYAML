@@ -1,5 +1,13 @@
 See also http://pvp.haskell.org/faq
 
+### 0.2.1.4
+
+_2024-04-25_
+
+* Drop support for GHC 7
+* Testsuite: relax lower bounds to accommodate LTS 11.22 (GHC 8.2) for new Stack CI
+* Tested with GHC 8.0 - 9.10.0 (alpha3)
+
 ### 0.2.1.3
 
 _2023-10-14_

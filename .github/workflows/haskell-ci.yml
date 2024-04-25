@@ -8,9 +8,9 @@
 #
 # For more information, see https://github.com/andreasabel/haskell-ci
 #
-# version: 0.19.20240416
+# version: 0.19.20240422
 #
-# REGENDATA ("0.19.20240416",["github","HsYAML.cabal"])
+# REGENDATA ("0.19.20240422",["github","HsYAML.cabal"])
 #
 name: Haskell-CI
 on:
@@ -27,7 +27,7 @@ jobs:
     timeout-minutes:
       60
     container:
-      image: buildpack-deps:focal
+      image: buildpack-deps:jammy
     continue-on-error: ${{ matrix.allow-failure }}
     strategy:
       matrix:
@@ -42,9 +42,9 @@ jobs:
             compilerVersion: 9.8.2
             setup-method: ghcup
             allow-failure: false
-          - compiler: ghc-9.6.4
+          - compiler: ghc-9.6.5
             compilerKind: ghc
-            compilerVersion: 9.6.4
+            compilerVersion: 9.6.5
             setup-method: ghcup
             allow-failure: false
           - compiler: ghc-9.4.8
