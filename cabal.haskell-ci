@@ -1,8 +1,4 @@
 branches: master
-
--- Dropping building tests on GHC 7.x which ships a too old bytestring package.
--- installed: +all -binary -bytestring -transformers -text
-tests: >=8.0
 installed: +all
 
 -- constraint-set text-2.1
