@@ -21,9 +21,9 @@ jobs:
         os: [ubuntu-latest]
         plan:
           - ghc: '9.8.2'
-            resolver: 'nightly-2024-04-25'
-          - ghc: '9.6.4'
-            resolver: 'lts-22.18'
+            resolver: 'nightly-2024-06-22'
+          - ghc: '9.6.5'
+            resolver: 'lts-22.26'
           - ghc: '9.4.8'
             resolver: 'lts-21.25'
           - ghc: '9.2.8'
@@ -48,12 +48,12 @@ jobs:
           - os: windows-latest
             plan:
               ghc: '9.8.2'
-              resolver: 'nightly-2024-04-25'
+              resolver: 'nightly-2024-06-22'
 
           - os: macos-latest
             plan:
               ghc: '9.8.2'
-              resolver: 'nightly-2024-04-25'
+              resolver: 'nightly-2024-06-22'
 
     runs-on: ${{ matrix.os }}
     env:
@@ -72,7 +72,7 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache
       env:
-        key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
+        key: ${{ runner.os }}-stack-${{ steps.setup.outputs.stack-version }}-ghc-${{ steps.setup.outputs.ghc-version }}
       with:
         path: ${{ steps.setup.outputs.stack-root }}
         key:  ${{ env.key }}-${{ github.sha }}
