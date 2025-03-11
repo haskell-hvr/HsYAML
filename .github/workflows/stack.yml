@@ -20,10 +20,12 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         plan:
-          - ghc: '9.8.2'
-            resolver: 'nightly-2024-06-22'
-          - ghc: '9.6.5'
-            resolver: 'lts-22.26'
+          - ghc: '9.10.1'
+            resolver: 'nightly-2025-03-11'
+          - ghc: '9.8.4'
+            resolver: 'lts-23.14'
+          - ghc: '9.6.6'
+            resolver: 'lts-22.43'
           - ghc: '9.4.8'
             resolver: 'lts-21.25'
           - ghc: '9.2.8'
@@ -38,8 +40,9 @@ jobs:
             resolver: 'lts-14.27'
           - ghc: '8.4.4'
             resolver: 'lts-12.26'
-          - ghc: '8.2.2'
-            resolver: 'lts-11.22'
+          # Stack 3 dropped support for GHC 8.2
+          # - ghc: '8.2.2'
+          #   resolver: 'lts-11.22'
           # LTS 9.21 does not have recent enough parsec and test
           # - ghc: '8.0.2'
           #   resolver: 'lts-9.21'
@@ -47,13 +50,13 @@ jobs:
         include:
           - os: windows-latest
             plan:
-              ghc: '9.8.2'
-              resolver: 'nightly-2024-06-22'
+              ghc: '9.10.1'
+              resolver: 'nightly-2025-03-11'
 
           - os: macos-latest
             plan:
-              ghc: '9.8.2'
-              resolver: 'nightly-2024-06-22'
+              ghc: '9.10.1'
+              resolver: 'nightly-2025-03-11'
 
     runs-on: ${{ matrix.os }}
     env:
