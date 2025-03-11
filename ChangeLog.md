@@ -1,36 +1,44 @@
-See also http://pvp.haskell.org/faq
+### 0.2.1.5
+
+_2025-03-11, Andreas Abel_
+
+* Drop support for old dependencies predating LTS 7.24 (GHC 8.0).
+* Relax bound on `containers`.
+* Tested with GHC 8.0 - 9.12.1.
 
 ### 0.2.1.4
 
-_2024-04-25_
+_2024-04-25, Andreas Abel_
 
-* Drop support for GHC 7
-* Testsuite: relax lower bounds to accommodate LTS 11.22 (GHC 8.2) for new Stack CI
-* Tested with GHC 8.0 - 9.10.0 (alpha3)
+* Drop support for GHC 7.
+* Testsuite: relax lower bounds to accommodate LTS 11.22 (GHC 8.2) for new Stack CI.
+* Tested with GHC 8.0 - 9.10.0 (alpha3).
 
 ### 0.2.1.3
 
-_2023-10-14_
+_2023-10-14, Andreas Abel_
 
-* Pacify `x-partial` warning of GHC 9.8
-* Tested with GHC 7.10 - 9.8.1
+* Pacify `x-partial` warning of GHC 9.8.
+* Tested with GHC 7.10 - 9.8.1.
 
 ### 0.2.1.2
 
-_2023-09-29_
+_2023-09-29, Andreas Abel_
 
 * Add `default-extensions: TypeOperators` to silence warning under GHC ≥ 9.4.
 * Support latest versions of dependencies.
-* Tested with GHC 7.10 - 9.8.0
+* Tested with GHC 7.10 - 9.8.0.
 
 ### 0.2.1.1
 
-_2022-05-11_
+_2022-05-11, Andreas Abel_
 
-* Compatibility with `mtl-2.3`
-* Tested with GHC 7.4 - 9.2
+* Compatibility with `mtl-2.3`.
+* Tested with GHC 7.4 - 9.2.
 
 ### 0.2.1.0
+
+_2019-10-06, Herbert Valerio Riedel_
 
 * Define `Functor Doc` instance ([#33](https://github.com/haskell-hvr/HsYAML/issues/33))
 * New `withScalar` function and also define `ToYAML Scalar` and `FromYAML Scalar` instances

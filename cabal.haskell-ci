@@ -1,19 +1,11 @@
 branches: master
 installed: +all
 
--- constraint-set text-2.1
---   ghc: >=8.2
---   constraints: text ^>=2.1
---   tests: True
---   run-tests: True
+constraint-set containers-0.8
+  ghc: >= 8.2
+  constraints: containers ^>=0.8
+  tests: True
+  run-tests: True
 
--- constraint-set bytestring-0.12
---   ghc: >=8.2
---   constraints: bytestring ^>=0.12
---   tests: True
---   run-tests: True
-
--- -- For constraint-sets
--- raw-project
---   allow-newer: bytestring
---   allow-newer: text
+raw-project
+  allow-newer: containers

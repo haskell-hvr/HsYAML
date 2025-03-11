@@ -42,11 +42,7 @@ import           Data.Char                    as X (chr, ord)
 import           Data.Map                     as X (Map)
 import qualified Data.Map                     as Map
 import           Data.Monoid                  as X (Monoid (mappend, mempty))
-#if MIN_VERSION_base(4,9,0)
 import           Data.Semigroup               ((<>))
-#else
-import           Data.Monoid                  ((<>))
-#endif
 import qualified Data.ByteString              as BS
 import qualified Data.ByteString.Lazy         as BS.L
 import           Data.Set                     as X (Set)
@@ -63,26 +59,6 @@ import           Text.Read
 liftEither' :: MonadError e m => Either e a -> m a
 liftEither' = either throwError return
 
-
-#if !MIN_VERSION_base(4,6,0)
-
--- | Parse a string using the 'Read' instance. Succeeds if there is
--- exactly one valid result.
-readMaybe :: Read a => String -> Maybe a
-readMaybe = either (const Nothing) id . readEither
-
--- | Parse a string using the 'Read' instance. Succeeds if there is
--- exactly one valid result. A 'Left' value indicates a parse error.
-readEither :: Read a => String -> Either String a
-readEither s = case [ x | (x,"") <- readPrec_to_S read' minPrec s ] of
-                 [x] -> Right x
-                 []  -> Left "Prelude.read: no parse"
-                 _   -> Left "Prelude.read: ambiguous parse"
- where
-  read' = do x <- readPrec
-             Text.Read.lift P.skipSpaces
-             return x
-#endif
 
 -- | Succeeds if the 'Integral' value is in the bounds of the given Data type.
 -- 'Nothing' indicates that the value is outside the bounds.
@@ -115,8 +91,4 @@ mapInsertNoDupe kx x t = case Map.insertLookupWithKey (\_ a _ -> a) kx x t of
 -- O(n) Convert a lazy 'BS.L.ByteString' into a strict 'BS.ByteString'.
 {-# INLINE bsToStrict #-}
 bsToStrict :: BS.L.ByteString -> BS.ByteString
-#if MIN_VERSION_bytestring(0,10,0)
 bsToStrict = BS.L.toStrict
-#else
-bsToStrict = BS.concat . BS.L.toChunks
-#endif
