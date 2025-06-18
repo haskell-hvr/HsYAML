@@ -20,12 +20,12 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         plan:
-          - ghc: '9.10.1'
-            resolver: 'nightly-2025-03-11'
+          - ghc: '9.10.2'
+            resolver: 'nightly-2025-06-18'
           - ghc: '9.8.4'
-            resolver: 'lts-23.14'
-          - ghc: '9.6.6'
-            resolver: 'lts-22.43'
+            resolver: 'lts-23.25'
+          - ghc: '9.6.7'
+            resolver: 'lts-22.44'
           - ghc: '9.4.8'
             resolver: 'lts-21.25'
           - ghc: '9.2.8'
@@ -50,13 +50,13 @@ jobs:
         include:
           - os: windows-latest
             plan:
-              ghc: '9.10.1'
-              resolver: 'nightly-2025-03-11'
+              ghc: '9.10.2'
+              resolver: 'nightly-2025-06-18'
 
           - os: macos-latest
             plan:
-              ghc: '9.10.1'
-              resolver: 'nightly-2025-03-11'
+              ghc: '9.10.2'
+              resolver: 'nightly-2025-06-18'
 
     runs-on: ${{ matrix.os }}
     env:
