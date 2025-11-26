@@ -247,7 +247,7 @@ decodeFourUTF8 :: Word8 -> Int -> [Word8] -> [(Int, Char)]
 decodeFourUTF8 first offset (second:third:fourth:rest)
   | second < 0x80 || 0xBF < second = error "UTF-8 quad byte char has invalid second byte"
   | third  < 0x80 || 0xBF < third  = error "UTF-8 quad byte char has invalid third byte"
-  | third  < 0x80 || 0xBF < third  = error "UTF-8 quad byte char has invalid fourth byte"
+  | fourth  < 0x80 || 0xBF < fourth  = error "UTF-8 quad byte char has invalid fourth byte"
   | otherwise                      = (offset', c) : undoUTF8' rest offset'
   where
     !offset' = offset + 4
