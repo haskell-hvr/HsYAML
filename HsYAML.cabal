@@ -1,4 +1,4 @@
-cabal-version:       1.14
+cabal-version:       2.2
 name:                HsYAML
 version:             0.2.1.5
 x-revision:          1
@@ -6,8 +6,7 @@ x-revision:          1
 synopsis:            Pure Haskell YAML 1.2 processor
 homepage:            https://github.com/haskell-hvr/HsYAML
 bug-reports:         https://github.com/haskell-hvr/HsYAML/issues
-license:             GPL-2
-X-SPDX-License-Identifier: GPL-2.0-or-later
+license:             GPL-2.0-or-later
 license-files:       LICENSE.GPLv2 LICENSE.GPLv3
 author:              Herbert Valerio Riedel
 maintainer:          https://github.com/haskell-hvr/HsYAML
@@ -47,7 +46,7 @@ description:
    .
    See also the <//hackage.haskell.org/package/HsYAML-aeson HsYAML-aeson> package which allows to decode and encode YAML by leveraging @aeson@'s 'FromJSON' and 'ToJSON' instances.
 
-extra-source-files:
+extra-doc-files:
   ChangeLog.md
 
 source-repository head
