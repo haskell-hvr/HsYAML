@@ -1,3 +1,13 @@
+### 0.2.1.6
+
+_2026-08-13, Simon Jakobi_
+
+* Fix validation of the fourth byte of four-byte UTF-8 sequences (#80).
+* Fix the license identifier to say `GPL-2.0-or-later` instead of `GPL-2`
+  (aka `GPL-2.0-only`) (#81, #82).
+  Consequently, `cabal-version` is bumped to 2.2.
+* Tested with GHC 8.0 - 9.14.
+
 ### 0.2.1.5
 
 _2025-03-11, Andreas Abel_
